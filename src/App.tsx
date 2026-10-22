@@ -120,6 +120,7 @@ export default function App() {
             onUpdateProfile={updateProfile}
             onExitToMenu={handleExitToMenu}
             onPlayAgain={handlePlayAgain}
+            isCountdownActive={isCountingDown}
           />
           
           {/* L'overlay viene montato sopra la BattleArena grazie a z-50 di Tailwind */}

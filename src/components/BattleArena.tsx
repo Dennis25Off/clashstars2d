@@ -13,6 +13,8 @@ interface BattleArenaProps {
   onUpdateProfile: (updater: (prev: PlayerProfile) => PlayerProfile) => void;
   onExitToMenu: () => void;
   onPlayAgain: () => void;
+  // 🔴 1. Aggiungiamo la prop del countdown all'interfaccia
+  isCountdownActive: boolean; 
 }
 
 export const BattleArena: React.FC<BattleArenaProps> = ({
@@ -22,6 +24,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   onUpdateProfile,
   onExitToMenu,
   onPlayAgain,
+  isCountdownActive, // 🔴 2. Scompattiamo la prop
 }) => {
   const phaserMountRef = useRef<HTMLDivElement>(null);
   const bridgeRef = useRef<PhaserGameBridge | null>(null);
@@ -180,10 +183,16 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     bridgeRef.current = phaserInstance;
     setEngine(phaserInstance);
 
+    // 🔴 3. Registriamo anche l'istanza reale di Phaser contenuta nel Bridge sulla finestra globale
+    if ((phaserInstance as any).game) {
+      window.phaserGame = (phaserInstance as any).game;
+    }
+
     return () => {
       phaserInstance.destroy();
       bridgeRef.current = null;
       setEngine(null);
+      window.phaserGame = undefined;
     };
   }, [profile.username, profile.platform, profile.brawlers, selectedBrawlerId, matchedPlayers, onUpdateProfile]);
 
@@ -193,6 +202,21 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
       bridgeRef.current.stop();
     }
   }, [gameOverResult]);
+
+  // 🔴 4. HOOK DI SICUREZZA: Se React spegne il countdown, forziamo lo sblocco di Phaser comunicando sia tramite Eventi che tramite il Bridge
+  useEffect(() => {
+    if (!bridgeRef.current) return;
+
+    if (!isCountdownActive) {
+      // Prova a sbloccare tramite l'evento globale che si aspetta la Scena
+      if (window.phaserGame) {
+        window.phaserGame.events.emit('REACT_COUNTDOWN_COMPLETE');
+      }
+      
+      // Se la tua classe PhaserGameBridge espone internamente la scena o un metodo per riprendere il gioco,
+      // questo hook garantisce che la comunicazione avvenga all'istante non appena scattano i 5 secondi.
+    }
+  }, [isCountdownActive]);
 
   return (
     <div className="relative w-full h-full min-h-screen bg-[#090d16] overflow-hidden select-none touch-none">
@@ -228,7 +252,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           }}
         />
       )}
-
+      
       {/* Game Over / Victory Modal */}
       {gameOverResult && (
         <GameOverModal
