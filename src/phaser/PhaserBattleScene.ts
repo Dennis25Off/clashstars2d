@@ -68,6 +68,45 @@ interface ActiveBurst {
 }
 
 export class PhaserBattleScene extends Phaser.Scene {
+ // Flag pubblica per bloccare il gameplay durante l'anteprima
+  public isCountdownActive: boolean = true;
+
+  constructor() {
+    super('PhaserBattleScene');
+  }
+
+  create() {
+    // Forza il blocco iniziale all'avvio della scena
+    this.isCountdownActive = true;
+
+    // Ascolta l'evento globale lanciato da React quando finisce il countdown
+    this.game.events.on('REACT_COUNTDOWN_COMPLETE', () => {
+      this.startMatch();
+    });
+
+    // ... Incolla qui il resto del tuo codice originale di create() ...
+  }
+
+  update(time: number, delta: number) {
+    // SE IL COUNTDOWN È ATTIVO, BLOCCA TUTTI GLI INPUT E IL NETWORKING DI SPOSTAMENTO
+    if (this.isCountdownActive) {
+      return;
+    }
+
+    // ... Incolla qui il resto del tuo codice originale di update() ...
+  }
+
+  public startMatch() {
+    this.isCountdownActive = false;
+    
+    // Riproduci il feedback sonoro e visivo di inizio round
+    sound.play('match_start'); 
+    this.cameras.main.flash(400, 255, 255, 255);
+    
+    // Pulisce l'evento per evitare duplicati nei match successivi
+    this.game.events.off('REACT_COUNTDOWN_COMPLETE');
+  }
+}
   public mapData!: MapData;
   public player!: BrawlerEntity;
   public brawlers: BrawlerEntity[] = [];

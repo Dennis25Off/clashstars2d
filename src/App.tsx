@@ -1,8 +1,3 @@
-/**
- * Clash Stars - Brawl Stars Style Multiplayer & Battle Royale Game
- * Cross-play ready, 5 unique brawlers, shrinking poison storm, chests & progression.
- */
-
 import React, { useState, useEffect } from 'react';
 import { loadPlayerProfile, savePlayerProfile } from './utils/storage';
 import { BrawlerId, LobbyPlayerInfo, PlayerProfile } from './types/game';
@@ -12,6 +7,8 @@ import { MatchmakingModal } from './components/MatchmakingModal';
 import { BrawlerSelectModal } from './components/BrawlerSelectModal';
 import { BoxesModal } from './components/BoxesModal';
 import { TrophyRoadModal } from './components/TrophyRoadModal';
+// Importa il nuovo overlay appena creato
+import { MatchStartOverlay } from './components/MatchStartOverlay';
 
 export default function App() {
   const [profile, setProfile] = useState<PlayerProfile>(() => loadPlayerProfile());
@@ -23,8 +20,10 @@ export default function App() {
   const [showBrawlersModal, setShowBrawlersModal] = useState(false);
   const [showBoxesModal, setShowBoxesModal] = useState(false);
   const [showTrophyRoadModal, setShowTrophyRoadModal] = useState(false);
+  
+  // Stato per controllare l'avvio del countdown sopra l'arena
+  const [isCountingDown, setIsCountingDown] = useState(false);
 
-  // Sync profile to local storage on change
   useEffect(() => {
     savePlayerProfile(profile);
   }, [profile]);
@@ -50,17 +49,30 @@ export default function App() {
   const handleMatchReady = (roster: LobbyPlayerInfo[]) => {
     setMatchedPlayers(roster);
     setCurrentView('battle');
+    setIsCountingDown(true); // Attiva l'overlay quando la partita è pronta
   };
 
   const handleExitToMenu = () => {
     setMatchedPlayers(null);
     setRequestedRoomId(undefined);
     setCurrentView('lobby');
+    setIsCountingDown(false);
   };
 
   const handlePlayAgain = () => {
     setMatchedPlayers(null);
     setCurrentView('matchmaking');
+    setIsCountingDown(false);
+  };
+
+  // Questa funzione viene scattata quando finiscono i 5 secondi dell'overlay React
+  const handleCountdownComplete = () => {
+    setIsCountingDown(false);
+    
+    // Invia un evento globale alle istanze Phaser attive nella pagina
+    if (window.phaserGame) {
+      window.phaserGame.events.emit('REACT_COUNTDOWN_COMPLETE');
+    }
   };
 
   return (
@@ -100,14 +112,25 @@ export default function App() {
 
       {/* 3. Battle Arena View */}
       {currentView === 'battle' && (
-        <BattleArena
-          profile={profile}
-          selectedBrawlerId={profile.selectedBrawler}
-          matchedPlayers={matchedPlayers}
-          onUpdateProfile={updateProfile}
-          onExitToMenu={handleExitToMenu}
-          onPlayAgain={handlePlayAgain}
-        />
+        <div className="relative w-full h-full">
+          <BattleArena
+            profile={profile}
+            selectedBrawlerId={profile.selectedBrawler}
+            matchedPlayers={matchedPlayers}
+            onUpdateProfile={updateProfile}
+            onExitToMenu={handleExitToMenu}
+            onPlayAgain={handlePlayAgain}
+          />
+          
+          {/* L'overlay viene montato sopra la BattleArena grazie a z-50 di Tailwind */}
+          {isCountingDown && (
+            <MatchStartOverlay
+              playerBrawlerId={profile.selectedBrawler}
+              matchedPlayers={matchedPlayers}
+              onComplete={handleCountdownComplete}
+            />
+          )}
+        </div>
       )}
 
       {/* Brawler Selection & Upgrade Modal */}
