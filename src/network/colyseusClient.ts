@@ -1,7 +1,7 @@
 /**
  * Colyseus Multiplayer Client for Clash Stars Battle Royale
  * Provides full Colyseus Room & Client state synchronization,
- * message dispatch, and real-time networking replacing raw WebSockets.
+ * message dispatch, and real-time networking using native WebSockets.
  */
 
 import { Client, Room } from 'colyseus.js';
@@ -82,56 +82,70 @@ export class ColyseusBattleRoom {
   public name: string = 'battle_royale';
   public state: ColyseusGameState;
   
+  private nativeRoom: Room<any> | null = null;
   private messageHandlers: Map<string, Set<ColyseusMessageHandler>> = new Map();
   private stateChangeHandlers: Set<(state: ColyseusGameState) => void> = new Set();
   private leaveHandlers: Set<() => void> = new Set();
   private errorHandlers: Set<(err: any) => void> = new Set();
-  private isConnected: boolean = true;
-  private syncTimer: any = null;
-  private pendingProjectiles: ColyseusProjectilePayload[] = [];
-  private pendingDamage: ColyseusDamagePayload[] = [];
-  private pendingKills: KillFeedEntry[] = [];
-  private pendingDestroyedBoxes: string[] = [];
-  private pendingCollectedItems: string[] = [];
-  private localPlayerState: Partial<ColyseusPlayerState> = {};
   private isHost: boolean = false;
-  private hostBotStates: any[] = [];
-  private broadcastChannel: BroadcastChannel | null = null;
 
-  constructor(roomId: string, sessionId: string, initialState?: Partial<ColyseusGameState>) {
-    this.id = roomId;
-    this.sessionId = sessionId;
-    this.state = {
-      roomId,
-      status: initialState?.status || 'waiting',
-      countdownRemaining: initialState?.countdownRemaining ?? null,
-      gameStartTime: initialState?.gameStartTime,
-      players: initialState?.players || [],
-      deterministicBots: initialState?.deterministicBots || [],
-      otherPlayers: [],
-      remoteProjectiles: [],
-      relevantDamage: [],
-      kills: [],
-      destroyedBoxes: [],
-      collectedItems: [],
-      syncedBots: [],
-      serverTime: Date.now(),
-      ...initialState,
+  constructor(nativeRoom: Room<any>) {
+    this.nativeRoom = nativeRoom;
+    this.id = nativeRoom.id;
+    this.sessionId = nativeRoom.sessionId;
+    
+    // Inizializza lo stato locale riflettendo lo stato iniziale del server Colyseus
+    this.state = this.mapNativeStateToGameState(nativeRoom.state);
+
+    // Sincronizza lo stato in tempo reale quando cambia sul Server
+    this.nativeRoom.onStateChange((serverState) => {
+      this.state = this.mapNativeStateToGameState(serverState);
+      this.triggerStateChange();
+    });
+
+    // Ascolta i messaggi di rete inviati dal server Colyseus tramite room.broadcast() o client.send()
+    this.nativeRoom.onMessage("*", (type, message) => {
+      this.triggerMessage(type as string, message);
+    });
+
+    // Gestione degli errori nativi
+    this.nativeRoom.onError((code, message) => {
+      this.errorHandlers.forEach((h) => h({ code, message }));
+    });
+
+    // Gestione dell'abbandono/disconnessione
+    this.nativeRoom.onLeave((code) => {
+      this.leaveHandlers.forEach((h) => h());
+    });
+  }
+
+  /**
+   * Converte la struttura dello schema di Colyseus nello stato atteso dall'applicazione TSX
+   */
+  private mapNativeStateToGameState(serverState: any): ColyseusGameState {
+    if (!serverState) return this.state;
+
+    // Converte mappe/array Colyseus (se presenti come collection nel server schema) in array JS normali
+    const playersArray: ColyseusPlayerState[] = Array.isArray(serverState.players) 
+      ? serverState.players 
+      : (serverState.players?.toJSON ? Object.values(serverState.players.toJSON()) : Object.values(serverState.players || {}));
+
+    return {
+      roomId: serverState.roomId || this.id,
+      status: serverState.status || 'waiting',
+      countdownRemaining: serverState.countdownRemaining ?? null,
+      gameStartTime: serverState.gameStartTime,
+      players: playersArray,
+      deterministicBots: serverState.deterministicBots || [],
+      otherPlayers: playersArray.filter((p: any) => p.id !== this.sessionId),
+      remoteProjectiles: serverState.remoteProjectiles || [],
+      relevantDamage: serverState.relevantDamage || [],
+      kills: serverState.kills || [],
+      destroyedBoxes: serverState.destroyedBoxes || [],
+      collectedItems: serverState.collectedItems || [],
+      syncedBots: serverState.syncedBots || [],
+      serverTime: serverState.serverTime || Date.now(),
     };
-
-    try {
-      this.broadcastChannel = new BroadcastChannel(`colyseus_room_${roomId}`);
-      this.broadcastChannel.onmessage = (ev) => {
-        const { type, payload } = ev.data || {};
-        if (type && payload) {
-          this.triggerMessage(type, payload);
-        }
-      };
-    } catch (_) {
-      // BroadcastChannel optional fallback
-    }
-
-    this.startStateSyncLoop();
   }
 
   public setHost(isHost: boolean) {
@@ -185,157 +199,45 @@ export class ColyseusBattleRoom {
   }
 
   /**
-   * Colyseus send method
+   * Colyseus native send method via WebSockets
    */
   public send(type: string, message: any): void {
-    if (!this.isConnected) return;
-
-    // Dispatch locally and to BroadcastChannel for instant inter-tab play
-    if (this.broadcastChannel) {
-      try {
-        this.broadcastChannel.postMessage({ type, payload: message });
-      } catch (_) {}
+    if (this.nativeRoom) {
+      this.nativeRoom.send(type, message);
     }
-
-    if (type === 'player_sync') {
-      this.localPlayerState = {
-        ...this.localPlayerState,
-        ...message,
-        id: this.sessionId,
-      };
-    } else if (type === 'projectile') {
-      this.pendingProjectiles.push(message);
-      this.triggerMessage('projectile', message);
-    } else if (type === 'damage') {
-      this.pendingDamage.push(message);
-      this.triggerMessage('damage', message);
-    } else if (type === 'kill') {
-      this.pendingKills.push(message);
-      this.triggerMessage('kill', message);
-    } else if (type === 'box_destroyed') {
-      if (message?.boxId) {
-        this.pendingDestroyedBoxes.push(message.boxId);
-      }
-    } else if (type === 'collect_item') {
-      if (message?.itemId) {
-        this.pendingCollectedItems.push(message.itemId);
-      }
-    } else if (type === 'bot_states') {
-      if (Array.isArray(message)) {
-        this.hostBotStates = message;
-      }
-    } else {
-      // General custom message
-      this.triggerMessage(type, message);
-    }
-  }
-
-  private startStateSyncLoop() {
-    const syncIntervalMs = 50; // 20 updates per second for smooth cross-play
-    let isFetching = false;
-
-    this.syncTimer = setInterval(async () => {
-      if (!this.isConnected || isFetching) return;
-      isFetching = true;
-
-      const payload = {
-        roomId: this.id,
-        playerId: this.sessionId,
-        ...this.localPlayerState,
-        newProjectiles: this.pendingProjectiles.splice(0),
-        damageEvents: this.pendingDamage.splice(0),
-        killEvents: this.pendingKills.splice(0),
-        destroyedBoxes: this.pendingDestroyedBoxes.splice(0),
-        collectedItems: this.pendingCollectedItems.splice(0),
-        isHost: this.isHost,
-        botStates: this.hostBotStates,
-      };
-
-      try {
-        const res = await fetch('/api/match/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.success) {
-            this.state.serverTime = data.serverTime || Date.now();
-            this.state.otherPlayers = data.otherPlayers || [];
-            this.state.remoteProjectiles = data.remoteProjectiles || [];
-            this.state.relevantDamage = data.relevantDamage || [];
-            this.state.kills = data.kills || [];
-            this.state.destroyedBoxes = data.destroyedBoxes || [];
-            this.state.collectedItems = data.collectedItems || [];
-            this.state.syncedBots = data.syncedBots || [];
-
-            this.triggerStateChange();
-            this.triggerMessage('sync', data);
-
-            if (data.kills && data.kills.length > 0) {
-              data.kills.forEach((k: KillFeedEntry) => this.triggerMessage('kill', k));
-            }
-            if (data.remoteProjectiles && data.remoteProjectiles.length > 0) {
-              data.remoteProjectiles.forEach((p: any) => this.triggerMessage('remote_projectile', p));
-            }
-            if (data.relevantDamage && data.relevantDamage.length > 0) {
-              data.relevantDamage.forEach((d: any) => this.triggerMessage('remote_damage', d));
-            }
-          }
-        }
-      } catch (err) {
-        // network tick error
-      } finally {
-        isFetching = false;
-      }
-    }, syncIntervalMs);
   }
 
   public leave(): void {
-    if (!this.isConnected) return;
-    this.isConnected = false;
-    if (this.syncTimer) {
-      clearInterval(this.syncTimer);
-      this.syncTimer = null;
+    if (this.nativeRoom) {
+      this.nativeRoom.leave();
+      this.nativeRoom = null;
     }
-    if (this.broadcastChannel) {
-      try { this.broadcastChannel.close(); } catch (_) {}
-      this.broadcastChannel = null;
-    }
-
-    fetch('/api/matchmaking/leave', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: this.sessionId, roomId: this.id }),
-    }).catch(() => {});
-
-    this.leaveHandlers.forEach((h) => {
-      try { h(); } catch (_) {}
-    });
   }
 }
 
 /**
  * ColyseusBattleClient
- * Front-end Colyseus Client interface
+ * Front-end Colyseus Client interface connected to WebSocket
  */
 export class ColyseusBattleClient {
   private colyseusSdkClient: Client | null = null;
   private activeRoom: ColyseusBattleRoom | null = null;
 
   constructor() {
+    // Determina l'indirizzo del server WebSocket (stesso host del client o configurabile)
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const host = window.location.host;
+    const host = window.location.host; 
+    
     try {
+      // Inizializza l'SDK ufficiale di Colyseus con il protocollo WS/WSS corretto
       this.colyseusSdkClient = new Client(`${protocol}://${host}`);
-    } catch (_) {
-      // Fallback client
+    } catch (e) {
+      console.error('Failed to initialize Colyseus SDK:', e);
     }
   }
 
   /**
-   * Joins or creates a Battle Royale match room using Colyseus
+   * Joins or creates a Battle Royale match room using the Colyseus WebSockets Matchmaker
    */
   public async joinOrCreate(
     roomName: string = 'battle_royale',
@@ -348,40 +250,42 @@ export class ColyseusBattleClient {
       requestedRoomId?: string;
     }
   ): Promise<ColyseusBattleRoom> {
+    if (!this.colyseusSdkClient) {
+      throw new Error("Colyseus SDK client is not initialized.");
+    }
+
     if (this.activeRoom) {
       this.activeRoom.leave();
       this.activeRoom = null;
     }
 
-    // Call Colyseus matchmaker endpoint
-    const response = await fetch('/api/matchmaking/join', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(options),
-    });
+    try {
+      let nativeRoom: Room<any>;
 
-    if (!response.ok) {
-      throw new Error(`Colyseus Matchmaking failed: ${response.statusText}`);
+      // Se viene passato un ID stanza specifico, forza l'ingresso in quella, altrimenti usa il matchmaker standard
+      if (options.requestedRoomId) {
+        nativeRoom = await this.colyseusSdkClient.joinById(options.requestedRoomId, options);
+      } else {
+        nativeRoom = await this.colyseusSdkClient.joinOrCreate(roomName, options);
+      }
+
+      // Incapsula la stanza nativa WebSocket di Colyseus nella classe wrapper usata dall'app
+      const room = new ColyseusBattleRoom(nativeRoom);
+
+      // Definisci l'host basandoti sui client connessi alla stanza reale
+      const isHost = nativeRoom.state?.players 
+        ? Object.keys(nativeRoom.state.players).indexOf(nativeRoom.sessionId) === 0 
+        : true;
+        
+      room.setHost(isHost);
+
+      this.activeRoom = room;
+      return room;
+
+    } catch (error) {
+      console.error(`Colyseus native matchmaking failed for ${roomName}:`, error);
+      throw error;
     }
-
-    const data = await response.json();
-    const roomId = data.roomId || options.requestedRoomId || `CS-${Math.floor(1000 + Math.random() * 9000)}`;
-    const sessionId = options.id;
-
-    const room = new ColyseusBattleRoom(roomId, sessionId, {
-      status: data.status,
-      countdownRemaining: data.countdownRemaining,
-      gameStartTime: data.gameStartTime,
-      players: data.players || [],
-      deterministicBots: data.deterministicBots || [],
-    });
-
-    // If first player, designate as host for bot simulation authoritative tick
-    const isHost = data.spawnIndex === 0 || !data.players || data.players.length <= 1;
-    room.setHost(isHost);
-
-    this.activeRoom = room;
-    return room;
   }
 
   public getActiveRoom(): ColyseusBattleRoom | null {

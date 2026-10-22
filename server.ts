@@ -1,6 +1,9 @@
 process.env.DISABLE_HMR = 'true';
 
 import express from 'express';
+import http from 'http';
+import { Server, Room, Client } from '@colyseus/core';
+import { WebSocketTransport } from '@colyseus/ws-transport';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -13,7 +16,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
-// --- MULTIPLAYER DATA STRUCTURES ---
+// --- STRUTTURE DATI MULTIPLAYER (COLYSEUS SCHEMA ADAPTATION) ---
 
 interface QueuedPlayer {
   id: string;
@@ -23,7 +26,6 @@ interface QueuedPlayer {
   platform: string;
   joinedAt: number;
   lastPing: number;
-  assignedRoomId?: string;
   spawnIndex?: number;
   isBot?: boolean;
 }
@@ -47,88 +49,13 @@ interface RemotePlayerSync {
   lastUpdate: number;
 }
 
-interface ProjectileEvent {
-  id: string;
-  ownerId: string;
-  brawlerId?: string;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  bulletType: string;
-  color: string;
-  radius: number;
-  damage: number;
-  isSuper: boolean;
-  piercing?: boolean;
-  timestamp: number;
-}
-
-interface DamageEvent {
-  id: string;
-  attackerId: string;
-  targetId: string;
-  damage: number;
-  color?: string;
-  timestamp: number;
-}
-
-interface KillEvent {
-  id: string;
-  killerId: string;
-  killerName: string;
-  killerPlatform?: string;
-  victimId: string;
-  victimName: string;
-  victimPlatform?: string;
-  timestamp: number;
-}
-
-interface BoxState {
-  id: string;
-  hp: number;
-  isDestroyed: boolean;
-}
-
-interface MatchRoom {
-  id: string;
-  createdAt: number;
-  status: 'waiting' | 'countdown' | 'in_game' | 'finished';
-  countdownStart?: number;
-  gameStartTime?: number;
-  mapSeed: number;
-  players: QueuedPlayer[];
-  deterministicBots: QueuedPlayer[];
-  playerStates: Map<string, RemotePlayerSync>;
-  botStates: Map<string, any>;
-  projectilesQueue: ProjectileEvent[];
-  damageQueue: DamageEvent[];
-  kills: KillEvent[];
-  boxStates: Map<string, BoxState>;
-  collectedItems: Set<string>;
-}
-
 const BOT_NAME_POOL = [
-  'StarShooter_IT',
-  'El_Pro_77',
-  'ShadowNinja',
-  'Phoenix_X',
-  'ViperKing',
-  'SuperBrawler',
-  'ToxicCrow',
-  'ApexPredator',
-  'GigaChad',
-  'GoldenStar',
-  'MegaKnight',
-  'GhostRider',
+  'StarShooter_IT', 'El_Pro_77', 'ShadowNinja', 'Phoenix_X',
+  'ViperKing', 'SuperBrawler', 'ToxicCrow', 'ApexPredator',
+  'GigaChad', 'GoldenStar', 'MegaKnight', 'GhostRider',
 ];
-
 const BOT_BRAWLER_POOL = ['blaze', 'viper', 'titan', 'raven', 'harmony'];
 const BOT_PLATFORM_POOL = ['mobile', 'pc', 'tablet'];
-
-let activeQueue: QueuedPlayer[] = [];
-let currentOpenRoom: MatchRoom = createNewRoom();
-const activeMatches = new Map<string, MatchRoom>();
 
 function generateDeterministicBots(humanCount: number): QueuedPlayer[] {
   const bots: QueuedPlayer[] = [];
@@ -153,440 +80,187 @@ function generateDeterministicBots(humanCount: number): QueuedPlayer[] {
   return bots;
 }
 
-function createNewRoom(customId?: string): MatchRoom {
-  const roomCode = customId || `CS-${Math.floor(1000 + Math.random() * 9000)}`;
-  const room: MatchRoom = {
-    id: roomCode,
-    createdAt: Date.now(),
-    status: 'waiting',
-    mapSeed: 4281,
-    players: [],
-    deterministicBots: [],
-    playerStates: new Map(),
-    botStates: new Map(),
-    projectilesQueue: [],
-    damageQueue: [],
-    kills: [],
-    boxStates: new Map(),
-    collectedItems: new Set(),
-  };
-  return room;
-}
+/**
+ * STANZA DI GIOCO COLYSEUS NATIVA PER BATTLE ROYALE
+ * Gestisce l'unione dei giocatori in un unico stato sincronizzato via WebSocket.
+ */
+export class BattleRoyaleRoom extends Room {
+  // Capienza massima consentita nella lobby reale
+  maxClients = 10;
 
-// Cleanup inactive players & expired matches
-setInterval(() => {
-  const now = Date.now();
-  // Clean queue
-  activeQueue = activeQueue.filter((p) => now - p.lastPing < 8000);
+  onCreate(options: any) {
+    console.log("Stanza Colyseus creata:", this.roomId);
+    
+    // Inizializza lo stato centralizzato della stanza
+    this.setState({
+      roomId: this.roomId,
+      status: 'waiting',
+      countdownRemaining: null,
+      gameStartTime: undefined,
+      players: {}, // Mappa chiave-valore degli schema player
+      deterministicBots: [],
+      remoteProjectiles: [],
+      relevantDamage: [],
+      kills: [],
+      destroyedBoxes: [],
+      collectedItems: [],
+      syncedBots: [],
+      serverTime: Date.now()
+    });
 
-  // Clean stale matches older than 20 minutes
-  for (const [roomId, room] of activeMatches.entries()) {
-    if (now - room.createdAt > 20 * 60 * 1000) {
-      activeMatches.delete(roomId);
-    }
+    // Registrazione listener dei messaggi in arrivo dai client tramite WebSocket
+    this.onMessage("player_sync", (client, message) => {
+      const player = this.state.players[client.sessionId];
+      if (player) {
+        Object.assign(player, message, { lastUpdate: Date.now() });
+      }
+    });
+
+    this.onMessage("projectile", (client, message) => {
+      // Inoltra il proiettile sparato a tutti gli altri client connessi
+      this.broadcast("projectile", { ...message, ownerId: client.sessionId }, { except: client });
+    });
+
+    this.onMessage("damage", (client, message) => {
+      this.broadcast("remote_damage", { ...message, attackerId: client.sessionId });
+    });
+
+    this.onMessage("kill", (client, message) => {
+      if (Array.isArray(this.state.kills)) {
+        this.state.kills.push(message);
+        if (this.state.kills.length > 10) this.state.kills.shift();
+      }
+      this.broadcast("kill", message);
+    });
+
+    this.onMessage("box_destroyed", (client, message) => {
+      if (message?.boxId && !this.state.destroyedBoxes.includes(message.boxId)) {
+        this.state.destroyedBoxes.push(message.boxId);
+      }
+      this.broadcast("box_destroyed", message);
+    });
+
+    this.onMessage("collect_item", (client, message) => {
+      if (message?.itemId && !this.state.collectedItems.includes(message.itemId)) {
+        this.state.collectedItems.push(message.itemId);
+      }
+      this.broadcast("collect_item", message);
+    });
+
+    this.onMessage("bot_states", (client, message) => {
+      // Sincronizza i bot simulati dall'host autoritario e li invia a tutti gli altri
+      if (Array.isArray(message)) {
+        this.state.syncedBots = message;
+      }
+    });
+
+    // Loop di aggiornamento temporale del server
+    this.setSimulationInterval(() => {
+      this.state.serverTime = Date.now();
+      this.checkLobbyCountdown();
+    }, 50);
   }
-}, 3000);
 
-// --- MATCHMAKING ENDPOINTS ---
-
-app.post('/api/matchmaking/join', (req, res) => {
-  const { id, name, brawlerId, trophies, platform, requestedRoomId } = req.body;
-  if (!id) {
-    res.status(400).json({ error: 'Missing player ID' });
-    return;
-  }
-
-  const now = Date.now();
-  let targetRoom: MatchRoom;
-
-  if (requestedRoomId && requestedRoomId.trim()) {
-    const reqId = requestedRoomId.trim().toUpperCase();
-    let existing = activeMatches.get(reqId);
-    if (!existing) {
-      existing = createNewRoom(reqId);
-      activeMatches.set(reqId, existing);
-    }
-    targetRoom = existing;
-  } else {
-    // Quick match room
-    if (currentOpenRoom.players.length >= 10 || currentOpenRoom.status === 'in_game') {
-      activeMatches.set(currentOpenRoom.id, currentOpenRoom);
-      currentOpenRoom = createNewRoom();
-    }
-    targetRoom = currentOpenRoom;
-    activeMatches.set(targetRoom.id, targetRoom);
-  }
-
-  const existingPlayer = targetRoom.players.find((p) => p.id === id);
-  let player: QueuedPlayer;
-
-  if (existingPlayer) {
-    player = existingPlayer;
-    player.lastPing = now;
-    if (name) player.name = name;
-    if (brawlerId) player.brawlerId = brawlerId;
-    if (trophies !== undefined) player.trophies = Number(trophies);
-    if (platform) player.platform = platform;
-  } else {
-    const spawnIndex = targetRoom.players.length;
-    player = {
-      id,
-      name: name || `Brawler_${spawnIndex}`,
-      brawlerId: brawlerId || 'blaze',
-      trophies: Number(trophies) || 0,
-      platform: platform || 'mobile',
-      joinedAt: now,
-      lastPing: now,
-      assignedRoomId: targetRoom.id,
-      spawnIndex,
-      isBot: false,
+  onJoin(client: Client, options: any) {
+    console.log(`Giocatore ${options.name || client.sessionId} si è unito alla stanza: ${this.roomId}`);
+    
+    const spawnIndex = Object.keys(this.state.players).length;
+    
+    // Inserisce il profilo nel dizionario condiviso dei player attivi
+    this.state.players[client.sessionId] = {
+      id: client.sessionId,
+      name: options.name || `Brawler_${spawnIndex}`,
+      brawlerId: options.brawlerId || 'blaze',
+      platform: options.platform || 'mobile',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      hp: 4000,
+      maxHp: 4000,
+      ammo: 3,
+      powerCubes: 0,
+      isAlive: true,
+      isMoving: false,
+      lastUpdate: Date.now()
     };
-    targetRoom.players.push(player);
-    activeQueue.push(player);
-  }
 
-
-  // Se 2 o piu giocatori reali entrano in lobby, parte il countdown sincronizzato
-  if (targetRoom.players.length >= 2 && targetRoom.status === 'waiting') {
-    targetRoom.status = 'countdown';
-    targetRoom.countdownStart = now;
-    targetRoom.gameStartTime = now + 10000; // Countdown di 10 secondi
-    targetRoom.deterministicBots = generateDeterministicBots(targetRoom.players.length);
-  }
-
-  const countdownRemaining = targetRoom.gameStartTime
-    ? Math.max(0, Math.ceil((targetRoom.gameStartTime - now) / 1000))
-    : null;
-
-  res.json({
-    success: true,
-    count: targetRoom.players.length,
-    players: targetRoom.players,
-    roomId: targetRoom.id,
-    spawnIndex: player.spawnIndex,
-    status: targetRoom.status,
-    countdownRemaining,
-    gameStartTime: targetRoom.gameStartTime,
-    deterministicBots: targetRoom.deterministicBots,
-  });
-});
-
-// Colyseus Standard Matchmaker Endpoints
-app.post(['/matchmake/joinOrCreate/:roomName', '/matchmake/create/:roomName'], (req, res) => {
-  const { id, name, brawlerId, trophies, platform, requestedRoomId } = req.body || {};
-  const playerId = id || `user_${Math.random().toString(36).substring(2, 9)}`;
-  const now = Date.now();
-  let targetRoom: MatchRoom;
-
-  if (requestedRoomId && requestedRoomId.trim()) {
-    const reqId = requestedRoomId.trim().toUpperCase();
-    let existing = activeMatches.get(reqId);
-    if (!existing) {
-      existing = createNewRoom(reqId);
-      activeMatches.set(reqId, existing);
+    // Se ci sono almeno 2 giocatori reali attivi, avvia il countdown sincronizzato
+    const humanCount = Object.keys(this.state.players).length;
+    if (humanCount >= 2 && this.state.status === 'waiting') {
+      this.startCountdown();
     }
-    targetRoom = existing;
-  } else {
-    if (currentOpenRoom.players.length >= 10 || currentOpenRoom.status === 'in_game') {
-      activeMatches.set(currentOpenRoom.id, currentOpenRoom);
-      currentOpenRoom = createNewRoom();
-    }
-    targetRoom = currentOpenRoom;
-    activeMatches.set(targetRoom.id, targetRoom);
   }
 
-  let player = targetRoom.players.find((p) => p.id === playerId);
-  if (!player) {
-    const spawnIndex = targetRoom.players.length;
-    player = {
-      id: playerId,
-      name: name || `Brawler_${spawnIndex}`,
-      brawlerId: brawlerId || 'blaze',
-      trophies: Number(trophies) || 0,
-      platform: platform || 'mobile',
-      joinedAt: now,
-      lastPing: now,
-      assignedRoomId: targetRoom.id,
-      spawnIndex,
-      isBot: false,
-    };
-    targetRoom.players.push(player);
-    activeQueue.push(player);
+  startCountdown() {
+    this.state.status = 'countdown';
+    const duration = 10000; // 10 secondi
+    this.state.gameStartTime = Date.now() + duration;
+    this.state.deterministicBots = generateDeterministicBots(Object.keys(this.state.players).length);
   }
 
-  res.json({
-    room: {
-      roomId: targetRoom.id,
-      processId: 'local',
-      name: req.params.roomName || 'battle_royale',
-    },
-    sessionId: player.id,
-    status: targetRoom.status,
-    countdownRemaining: targetRoom.gameStartTime ? Math.max(0, Math.ceil((targetRoom.gameStartTime - now) / 1000)) : null,
-    players: targetRoom.players,
-    deterministicBots: targetRoom.deterministicBots,
-  });
-});
+  checkLobbyCountdown() {
+    if (this.state.status === 'countdown' && this.state.gameStartTime) {
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((this.state.gameStartTime - now) / 1000));
+      this.state.countdownRemaining = remaining;
 
-app.post('/api/matchmaking/ping', (req, res) => {
-  const { id, roomId } = req.body;
-  const now = Date.now();
-
- //  NUOVO CODICE DA AGGIUNGERE:
-  let targetRoom;
-
-  // 1. Se il client passa il roomId, lo cerchiamo direttamente lì
-  if (roomId) {
-    targetRoom = activeMatches.get(roomId.trim().toUpperCase());
-  }
-
-  // 2. Se non lo trova o non è stato passato, cerchiamo in quale stanza attiva si trova il giocatore
-  if (!targetRoom) {
-    for (const room of activeMatches.values()) {
-      if (room.players.some((p) => p.id === id)) {
-        targetRoom = room;
-        break;
+      if (now >= this.state.gameStartTime) {
+        this.state.status = 'in_game';
       }
     }
   }
 
-  // 3. Se non è da nessuna parte, fallback sulla stanza aperta corrente
-  if (!targetRoom) {
-    targetRoom = currentOpenRoom;
+  onLeave(client: Client, consented: boolean) {
+    console.log(`Giocatore disconnesso: ${client.sessionId}`);
+    delete this.state.players[client.sessionId];
   }
 
-  const player = targetRoom.players.find((p) => p.id === id);
-  if (player) {
-    player.lastPing = now;
+  onDispose() {
+    console.log(`Stanza ${this.roomId} distrutta.`);
   }
+}
 
-  // Countdown che inizia la partita se il giocatore e da solo. Valore attuale = 20 secondi
-  if (targetRoom.status === 'waiting' && targetRoom.players.length >= 1) {
-    const waitTime = now - targetRoom.players[0].joinedAt;
-    if (waitTime >= 20000) {
-      targetRoom.status = 'countdown';
-      targetRoom.countdownStart = now;
-      targetRoom.gameStartTime = now + 3500;
-      targetRoom.deterministicBots = generateDeterministicBots(targetRoom.players.length);
-    }
-  }
+// --- INITIALIZE SERVERS ---
 
-  // Check if countdown completed
-  if (targetRoom.status === 'countdown' && targetRoom.gameStartTime && now >= targetRoom.gameStartTime) {
-    targetRoom.status = 'in_game';
-  }
+const httpServer = http.createServer(app);
 
-  const countdownRemaining = targetRoom.gameStartTime
-    ? Math.max(0, Math.ceil((targetRoom.gameStartTime - now) / 1000))
-    : null;
-
-  res.json({
-    success: true,
-    count: targetRoom.players.length,
-    players: targetRoom.players,
-    roomId: targetRoom.id,
-    spawnIndex: player?.spawnIndex ?? 0,
-    status: targetRoom.status,
-    countdownRemaining,
-    gameStartTime: targetRoom.gameStartTime,
-    deterministicBots: targetRoom.deterministicBots,
-  });
+// Inizializza il Server Colyseus principale agganciato all'infrastruttura HTTP
+const gameServer = new Server({
+  transport: new WebSocketTransport({
+    server: httpServer
+  })
 });
 
-app.post('/api/matchmaking/start-now', (req, res) => {
-  const { roomId } = req.body;
+// Definisci l'identificatore di stanza utilizzato anche dal client TSX
+gameServer.define("battle_royale", BattleRoyaleRoom);
+
+// --- COMPATIBILITY BACKWARD MATCHMAKING FALLBACK ENDPOINTS ---
+
+app.post('/api/matchmaking/join', (req, res) => {
   const now = Date.now();
-  const room = activeMatches.get(roomId) || currentOpenRoom;
-  if (room && room.status !== 'in_game') {
-    room.status = 'countdown';
-    room.countdownStart = now;
-    room.gameStartTime = now + 1200; // Immediate 1s countdown
-    room.deterministicBots = generateDeterministicBots(room.players.length);
-  }
-  res.json({ success: true, gameStartTime: room.gameStartTime });
+  res.json({
+    success: true,
+    roomId: "VIRTUAL_LOBBY",
+    status: "waiting",
+    countdownRemaining: null,
+    players: [],
+    deterministicBots: [],
+    note: "Migrato a WebSockets. Usa l'SDK Colyseus client per connetterti nativamente."
+  });
 });
 
 app.post('/api/matchmaking/leave', (req, res) => {
-  const { id, roomId } = req.body;
-  activeQueue = activeQueue.filter((p) => p.id !== id);
-  if (roomId) {
-    const room = activeMatches.get(roomId);
-    if (room) {
-      room.players = room.players.filter((p) => p.id !== id);
-    }
-  }
-  currentOpenRoom.players = currentOpenRoom.players.filter((p) => p.id !== id);
   res.json({ success: true });
 });
 
-// --- REAL-TIME MULTIPLAYER MATCH STATE SYNCHRONIZATION ---
+// --- VITE MIDDLEWARE DEVELOPMENT ENGINE ---
 
-app.post('/api/match/sync', (req, res) => {
-  const {
-    roomId,
-    playerId,
-    name,
-    brawlerId,
-    platform,
-    x,
-    y,
-    rotation,
-    hp,
-    maxHp,
-    ammo,
-    powerCubes,
-    isAlive,
-    isMoving,
-    walkCycle,
-    hitFlash,
-    newProjectiles,
-    damageEvents,
-    killEvents,
-    destroyedBoxes,
-    collectedItems,
-    isHost,
-    botStates,
-  } = req.body;
-
-  if (!roomId || !playerId) {
-    res.status(400).json({ error: 'Missing roomId or playerId' });
-    return;
-  }
-
-  let room = activeMatches.get(roomId);
-  if (!room && currentOpenRoom.id === roomId) {
-    room = currentOpenRoom;
-    activeMatches.set(roomId, room);
-  }
-
-  if (!room) {
-    room = createNewRoom(roomId);
-    room.status = 'in_game';
-    activeMatches.set(roomId, room);
-  }
-
-  const now = Date.now();
-
-  // 1. Update this player's position & vitals
-  room.playerStates.set(playerId, {
-    id: playerId,
-    name: name || 'Player',
-    brawlerId: brawlerId || 'blaze',
-    platform: platform || 'mobile',
-    x: Number(x) || 0,
-    y: Number(y) || 0,
-    rotation: Number(rotation) || 0,
-    hp: Number(hp) || 0,
-    maxHp: Number(maxHp) || 4000,
-    ammo: Number(ammo) || 3,
-    powerCubes: Number(powerCubes) || 0,
-    isAlive: Boolean(isAlive),
-    isMoving: Boolean(isMoving),
-    walkCycle: Number(walkCycle) || 0,
-    hitFlash: Boolean(hitFlash),
-    lastUpdate: now,
-  });
-
-  // 2. Queue any new projectiles fired
-  if (Array.isArray(newProjectiles) && newProjectiles.length > 0) {
-    for (const p of newProjectiles) {
-      room.projectilesQueue.push({
-        ...p,
-        ownerId: playerId,
-        timestamp: now,
-      });
-    }
-  }
-
-  // 3. Queue damage events dealt
-  if (Array.isArray(damageEvents) && damageEvents.length > 0) {
-    for (const d of damageEvents) {
-      room.damageQueue.push({
-        ...d,
-        attackerId: playerId,
-        timestamp: now,
-      });
-    }
-  }
-
-  // 4. Queue kills
-  if (Array.isArray(killEvents) && killEvents.length > 0) {
-    for (const k of killEvents) {
-      if (!room.kills.some((existing) => existing.id === k.id)) {
-        room.kills.push(k);
-      }
-    }
-  }
-
-  // 5. Sync destroyed boxes
-  if (Array.isArray(destroyedBoxes) && destroyedBoxes.length > 0) {
-    for (const boxId of destroyedBoxes) {
-      room.boxStates.set(boxId, { id: boxId, hp: 0, isDestroyed: true });
-    }
-  }
-
-  // 6. Sync collected items (cubes, powerups)
-  if (Array.isArray(collectedItems) && collectedItems.length > 0) {
-    for (const itemId of collectedItems) {
-      room.collectedItems.add(itemId);
-    }
-  }
-
-  // 7. Host updates authoritative bot states
-  if (isHost && Array.isArray(botStates)) {
-    for (const bot of botStates) {
-      room.botStates.set(bot.id, {
-        ...bot,
-        lastUpdate: now,
-      });
-    }
-  }
-
-  // Clean old queued events
-  room.projectilesQueue = room.projectilesQueue.filter((p) => now - p.timestamp < 3500);
-  room.damageQueue = room.damageQueue.filter((d) => now - d.timestamp < 3500);
-
-  // Gather other players currently in the room
-  const otherPlayers: RemotePlayerSync[] = [];
-  for (const [id, state] of room.playerStates.entries()) {
-    if (id !== playerId && now - state.lastUpdate < 6000) {
-      otherPlayers.push(state);
-    }
-  }
-
-  // Return fresh projectiles from other players
-  const remoteProjectiles = room.projectilesQueue.filter(
-    (p) => p.ownerId !== playerId && now - p.timestamp < 1200
-  );
-
-  // Return damage events directed at this player or damage events in general
-  const relevantDamage = room.damageQueue.filter(
-    (d) => (d.targetId === playerId || d.targetId.startsWith('bot_')) && now - d.timestamp < 1200
-  );
-
-  // Return bot states synced by host (for non-hosts)
-  const syncedBots = !isHost ? Array.from(room.botStates.values()) : [];
-
-  res.json({
-    success: true,
-    serverTime: now,
-    otherPlayers,
-    remoteProjectiles,
-    relevantDamage,
-    kills: room.kills.slice(-6),
-    destroyedBoxes: Array.from(room.boxStates.keys()),
-    collectedItems: Array.from(room.collectedItems),
-    syncedBots,
-  });
-});
-
-// Mount Vite middleware in development
 const isProduction = process.env.NODE_ENV === 'production';
 if (!isProduction) {
   const vite = await createViteServer({
     server: {
       middlewareMode: true,
-      hmr: false, // Disables HMR WebSocket client in preview iframe
+      hmr: false,
     },
     appType: 'spa',
   });
@@ -598,6 +272,7 @@ if (!isProduction) {
   });
 }
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Clash Stars Server running on http://0.0.0.0:${PORT}`);
+// IMPORTANTE: Avvia il server HTTP globale (che include il server WebSocket di Colyseus)
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`Clash Stars WebSocket Server running on http://0.0.0:${PORT}`);
 });

@@ -7,8 +7,9 @@ import { MatchmakingModal } from './components/MatchmakingModal';
 import { BrawlerSelectModal } from './components/BrawlerSelectModal';
 import { BoxesModal } from './components/BoxesModal';
 import { TrophyRoadModal } from './components/TrophyRoadModal';
-// Importa il nuovo overlay appena creato
 import { MatchStartOverlay } from './components/MatchStartOverlay';
+// Importiamo il client globale per gestire in modo sicuro il ciclo di vita delle stanze WebSocket
+import { colyseusClient } from './utils/colyseusClient'; 
 
 export default function App() {
   const [profile, setProfile] = useState<PlayerProfile>(() => loadPlayerProfile());
@@ -27,6 +28,13 @@ export default function App() {
   useEffect(() => {
     savePlayerProfile(profile);
   }, [profile]);
+
+  // Cleanup di sicurezza all'uscita o alla chiusura dell'applicazione
+  useEffect(() => {
+    return () => {
+      colyseusClient.leaveActiveRoom();
+    };
+  }, []);
 
   const updateProfile = (updater: (prev: PlayerProfile) => PlayerProfile) => {
     setProfile((prev) => {
@@ -53,6 +61,8 @@ export default function App() {
   };
 
   const handleExitToMenu = () => {
+    // Chiude in modo pulito il canale WebSocket attivo sul server Colyseus
+    colyseusClient.leaveActiveRoom();
     setMatchedPlayers(null);
     setRequestedRoomId(undefined);
     setCurrentView('lobby');
@@ -60,6 +70,8 @@ export default function App() {
   };
 
   const handlePlayAgain = () => {
+    // Chiude la vecchia stanza prima di rientrare in matchmaking
+    colyseusClient.leaveActiveRoom();
     setMatchedPlayers(null);
     setCurrentView('matchmaking');
     setIsCountingDown(false);
@@ -105,7 +117,10 @@ export default function App() {
             selectedBrawlerId={profile.selectedBrawler}
             requestedRoomId={requestedRoomId}
             onMatchReady={handleMatchReady}
-            onCancel={() => setCurrentView('lobby')}
+            onCancel={() => {
+              colyseusClient.leaveActiveRoom();
+              setCurrentView('lobby');
+            }}
           />
         </>
       )}
