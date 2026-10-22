@@ -9,7 +9,7 @@ import { BoxesModal } from './components/BoxesModal';
 import { TrophyRoadModal } from './components/TrophyRoadModal';
 import { MatchStartOverlay } from './components/MatchStartOverlay';
 // Importiamo il client globale per gestire in modo sicuro il ciclo di vita delle stanze WebSocket
-import { colyseusClient } from './utils/colyseusClient'; 
+import { colyseusClient } from './network/colyseusClient'; 
 
 export default function App() {
   const [profile, setProfile] = useState<PlayerProfile>(() => loadPlayerProfile());
