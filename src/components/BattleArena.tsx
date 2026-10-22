@@ -203,21 +203,24 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
     }
   }, [gameOverResult]);
 
-  // 🔴 4. HOOK DI SICUREZZA: Se React spegne il countdown, forziamo lo sblocco di Phaser comunicando sia tramite Eventi che tramite il Bridge
   useEffect(() => {
-    if (!bridgeRef.current) return;
-
-    if (!isCountdownActive) {
-      // Prova a sbloccare tramite l'evento globale che si aspetta la Scena
-      if (window.phaserGame) {
-        window.phaserGame.events.emit('REACT_COUNTDOWN_COMPLETE');
+    if (bridgeRef.current && !isCountdownActive) {
+      try {
+        const phaserGame = (bridgeRef.current as any).game;
+        if (phaserGame) {
+          // Cerchiamo la chiave 'BattleScene' configurata nel costruttore di PhaserBattleScene.ts
+          const scene = phaserGame.scene.getScene('BattleScene') as any;
+          
+          if (scene && scene.isCountdownActive) {
+            console.log("Sblocco della scena Phaser completato con successo!");
+            scene.startMatch(); 
+          }
+        }
+      } catch (error) {
+        console.error("Impossibile sbloccare imperativamente la scena:", error);
       }
-      
-      // Se la tua classe PhaserGameBridge espone internamente la scena o un metodo per riprendere il gioco,
-      // questo hook garantisce che la comunicazione avvenga all'istante non appena scattano i 5 secondi.
     }
   }, [isCountdownActive]);
-
   return (
     <div className="relative w-full h-full min-h-screen bg-[#090d16] overflow-hidden select-none touch-none">
       {/* Phaser 3 Hardware Accelerated 2D Game Container */}
