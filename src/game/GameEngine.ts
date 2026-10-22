@@ -135,7 +135,7 @@ export class GameEngine {
 
     // Set initial adaptive FOV (generous wide field of view)
     const isMobileViewport = window.innerWidth < 768;
-    this.camera.targetZoom = isMobileViewport ? 0.62 : 0.68;
+    this.camera.targetZoom = isMobileViewport ? 0.58 : 0.65;
     this.camera.zoom = this.camera.targetZoom;
 
     this.mapData = generateBattleRoyaleMap();
@@ -311,7 +311,7 @@ export class GameEngine {
   // --- INTERACTIVE FOV METHODS ---
   public setFovMode(mode: 'normal' | 'wide' | 'ultra') {
     this.fovMode = mode;
-    if (mode === 'ultra') this.camera.targetZoom = 0.52; // Massive wide-angle tactical view
+    if (mode === 'ultra') this.camera.targetZoom = 0.58; // Massive wide-angle tactical view
     else if (mode === 'wide') this.camera.targetZoom = 0.65; // Balanced wide FOV (recommended)
     else this.camera.targetZoom = 0.82; // Closer combat view
     this.callbacks.onFovChange?.(this.camera.targetZoom, mode);
