@@ -546,14 +546,15 @@ export class PhaserBattleScene extends Phaser.Scene {
 
     const dt = Math.min(delta / 1000, 0.05);
 
-    // 🟢 MODIFICA DEL COUNTDOWN: Se attivo, aggiorna la telecamera e disegna i layer grafici fissi,
-    // ma interrompe immediatamente l'update bloccando movimenti locali, comandi di rete e IA dei bot.
+    // 🟢 CORREZIONE GRAFICA: Se il countdown è attivo, aggiorna la telecamera 
+    // e RENDERIZZA la mappa, ma blocca i movimenti, l'IA e i pacchetti di rete.
     if (this.isCountdownActive) {
       this.updateCamera();
-      this.renderPhaserLayers();
-      return; 
+      this.renderPhaserLayers(); // Mantiene visibile la mappa e i brawler!
+      return; // Esce prima di elaborare joystick, attacchi e Colyseus
     }
-
+    
+    
     // 1. Process Player Movement & Input
     this.updatePlayerInput(dt);
 
