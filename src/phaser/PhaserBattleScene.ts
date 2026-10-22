@@ -545,14 +545,6 @@ export class PhaserBattleScene extends Phaser.Scene {
     if (this.isGameOver && this.placementCalculated) return;
 
     const dt = Math.min(delta / 1000, 0.05);
-
-    // 🟢 CORREZIONE GRAFICA: Se il countdown è attivo, aggiorna la telecamera 
-    // e RENDERIZZA la mappa, ma blocca i movimenti, l'IA e i pacchetti di rete.
-    if (this.isCountdownActive) {
-      this.updateCamera();
-      this.renderPhaserLayers(); // Mantiene visibile la mappa e i brawler!
-      return; // Esce prima di elaborare joystick, attacchi e Colyseus
-    }
     
     
     // 1. Process Player Movement & Input
@@ -590,7 +582,23 @@ export class PhaserBattleScene extends Phaser.Scene {
   }
   
   private updatePlayerInput(dt: number) {
+        // 🟢 SE IL COUNTDOWN È ATTIVO, FORZIAMO IL GIOCATORE A RIMANERE FERMO E USCIAMO
+    if (this.isCountdownActive) {
+      if (this.player) {
+        this.player.isMoving = false;
+        this.player.walkCycle = 0;
+        this.player.vx = 0;
+        this.player.vy = 0;
+      }
+      this.moveVector.x = 0;
+      this.moveVector.y = 0;
+      this.aimVector.isAiming = false;
+      this.aimVector.isSuperAiming = false;
+      return; 
+    }
+
     if (!this.player.isAlive || this.player.isLeaping) return;
+
 
     // Track real-time mouse position in world space as player & camera move
     if (this.isMouseActive && this.input.activePointer && !this.input.activePointer.wasTouch) {
@@ -836,8 +844,17 @@ export class PhaserBattleScene extends Phaser.Scene {
   }
 
   private updateBotAI(bot: BrawlerEntity, dt: number) {
-    if (bot.isLeaping || !bot.isAlive) return;
+    // 🟢 SE IL COUNTDOWN È ATTIVO, I BOT RIMANGONO IN IDLE SENZA MUOVERSI O ATTACCARE
+    if (this.isCountdownActive) {
+      bot.isMoving = false;
+      bot.walkCycle = 0;
+      bot.vx = 0;
+      bot.vy = 0;
+      return;
+    }
 
+    if (bot.isLeaping || !bot.isAlive) return;
+    
     bot.aiDecisionTimer -= dt;
     const def = BRAWLERS[bot.brawlerId];
     const cx = this.poisonZone.centerX;
