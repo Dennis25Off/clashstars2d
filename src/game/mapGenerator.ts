@@ -28,11 +28,11 @@ export function generateBattleRoyaleMap(): MapData {
   const cx = width / 2;
   const cy = height / 2;
 
-  // Center cross walls
-  obstacles.push({ x: cx - 180, y: cy - 180, width: 70, height: 70, type: 'stone', destructible: false });
-  obstacles.push({ x: cx + 110, y: cy - 180, width: 70, height: 70, type: 'stone', destructible: false });
-  obstacles.push({ x: cx - 180, y: cy + 110, width: 70, height: 70, type: 'stone', destructible: false });
-  obstacles.push({ x: cx + 110, y: cy + 110, width: 70, height: 70, type: 'stone', destructible: false });
+  // Center cross walls (destructible by supers)
+  obstacles.push({ x: cx - 180, y: cy - 180, width: 70, height: 70, type: 'stone', destructible: true, hp: 1000 });
+  obstacles.push({ x: cx + 110, y: cy - 180, width: 70, height: 70, type: 'stone', destructible: true, hp: 1000 });
+  obstacles.push({ x: cx - 180, y: cy + 110, width: 70, height: 70, type: 'stone', destructible: true, hp: 1000 });
+  obstacles.push({ x: cx + 110, y: cy + 110, width: 70, height: 70, type: 'stone', destructible: true, hp: 1000 });
 
   // Center destructible wooden crates & stone barricades
   obstacles.push({ x: cx - 25, y: cy - 160, width: 50, height: 50, type: 'wood_box', destructible: true, hp: 400 });
@@ -61,9 +61,9 @@ export function generateBattleRoyaleMap(): MapData {
   ];
 
   quadrants.forEach((q, i) => {
-    // Stone ruins
-    obstacles.push({ x: q.ox - 100, y: q.oy - 80, width: 180, height: 40, type: 'stone', destructible: false });
-    obstacles.push({ x: q.ox - 100, y: q.oy - 40, width: 40, height: 140, type: 'stone', destructible: false });
+    // Stone ruins (destructible by supers)
+    obstacles.push({ x: q.ox - 100, y: q.oy - 80, width: 180, height: 40, type: 'stone', destructible: true, hp: 1000 });
+    obstacles.push({ x: q.ox - 100, y: q.oy - 40, width: 40, height: 140, type: 'stone', destructible: true, hp: 1000 });
 
     // Destructible barricades
     obstacles.push({ x: q.ox + 20, y: q.oy + 40, width: 60, height: 60, type: 'wood_box', destructible: true, hp: 400 });
@@ -109,8 +109,8 @@ export function generateBattleRoyaleMap(): MapData {
   ];
 
   cardinals.forEach((c, idx) => {
-    // Stone block
-    obstacles.push({ x: c.ox - 60, y: c.oy - 50, width: 120, height: 100, type: 'stone', destructible: false });
+    // Stone block (destructible by supers)
+    obstacles.push({ x: c.ox - 60, y: c.oy - 50, width: 120, height: 100, type: 'stone', destructible: true, hp: 1000 });
     // Bushes
     bushes.push({ x: c.ox - 150, y: c.oy - 80, width: 80, height: 160 });
     bushes.push({ x: c.ox + 70, y: c.oy - 80, width: 80, height: 160 });

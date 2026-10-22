@@ -9,8 +9,40 @@ export class PhaserGameBridge {
   public container: HTMLElement;
   public roomId: string;
 
-  public moveVector = { x: 0, y: 0 };
-  public aimVector = { x: 0, y: 0, isAiming: false, isSuperAiming: false };
+  private _moveVector = { x: 0, y: 0 };
+  private _aimVector = { x: 0, y: 0, isAiming: false, isSuperAiming: false };
+
+  public get moveVector() {
+    if (this.scene) return this.scene.moveVector;
+    return this._moveVector;
+  }
+
+  public set moveVector(val: { x: number; y: number }) {
+    this._moveVector.x = val.x;
+    this._moveVector.y = val.y;
+    if (this.scene) {
+      this.scene.moveVector.x = val.x;
+      this.scene.moveVector.y = val.y;
+    }
+  }
+
+  public get aimVector() {
+    if (this.scene) return this.scene.aimVector;
+    return this._aimVector;
+  }
+
+  public set aimVector(val: { x: number; y: number; isAiming?: boolean; isSuperAiming?: boolean }) {
+    this._aimVector.x = val.x;
+    this._aimVector.y = val.y;
+    if (val.isAiming !== undefined) this._aimVector.isAiming = val.isAiming;
+    if (val.isSuperAiming !== undefined) this._aimVector.isSuperAiming = val.isSuperAiming;
+    if (this.scene) {
+      this.scene.aimVector.x = val.x;
+      this.scene.aimVector.y = val.y;
+      if (val.isAiming !== undefined) this.scene.aimVector.isAiming = val.isAiming;
+      if (val.isSuperAiming !== undefined) this.scene.aimVector.isSuperAiming = val.isSuperAiming;
+    }
+  }
 
   constructor(
     container: HTMLElement,
@@ -65,8 +97,8 @@ export class PhaserGameBridge {
       const activeScene = this.game?.scene.getScene('BattleScene') as PhaserBattleScene;
       if (activeScene) {
         this.scene = activeScene;
-        activeScene.moveVector = this.moveVector;
-        activeScene.aimVector = this.aimVector;
+        activeScene.moveVector = this._moveVector;
+        activeScene.aimVector = this._aimVector;
       }
     });
   }

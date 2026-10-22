@@ -25,6 +25,7 @@ interface GameHUDProps {
   playerAmmo: number;
   playerSuperCharge: number;
   powerCubes: number;
+  gadgetCharges?: number;
   killFeed: KillFeedEntry[];
   poisonPhase: number;
   poisonTimer: number;
@@ -45,6 +46,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   playerAmmo,
   playerSuperCharge,
   powerCubes,
+  gadgetCharges,
   killFeed,
   poisonPhase,
   poisonTimer,
@@ -124,7 +126,21 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   });
   const [dpadActive, setDpadActive] = useState({ up: false, down: false, left: false, right: false });
 
-  // Left joystick visual state
+  // Left joystick ref & visual state
+  const leftStickRef = useRef<{
+    active: boolean;
+    centerX: number;
+    centerY: number;
+    currX: number;
+    currY: number;
+  }>({
+    active: false,
+    centerX: 0,
+    centerY: 0,
+    currX: 0,
+    currY: 0,
+  });
+
   const [leftStick, setLeftStick] = useState<{
     active: boolean;
     startX: number;
@@ -139,7 +155,21 @@ export const GameHUD: React.FC<GameHUDProps> = ({
     currY: 0,
   });
 
-  // Right attack joystick visual state
+  // Right attack joystick ref & visual state
+  const rightStickRef = useRef<{
+    active: boolean;
+    centerX: number;
+    centerY: number;
+    currX: number;
+    currY: number;
+  }>({
+    active: false,
+    centerX: 0,
+    centerY: 0,
+    currX: 0,
+    currY: 0,
+  });
+
   const [rightStick, setRightStick] = useState<{
     active: boolean;
     startX: number;
@@ -299,64 +329,74 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   // --- NATIVE MULTITOUCH CONTROLS (INDEPENDENT IDENTIFIER TRACKING) ---
   useEffect(() => {
     const onWindowTouchMove = (e: TouchEvent) => {
-      // 1. Process Left Stick if its touch identifier is moving
-      if (leftTouchIdRef.current !== null && leftTouchRef.current) {
+      // 1. Process Left Stick if its touch identifier is active
+      if (leftTouchIdRef.current !== null && leftTouchRef.current && leftStickRef.current.active) {
         for (let i = 0; i < e.touches.length; i++) {
           const t = e.touches[i];
           if (t.identifier === leftTouchIdRef.current) {
             const rect = leftTouchRef.current.getBoundingClientRect();
-            const x = t.clientX - rect.left;
-            const y = t.clientY - rect.top;
-            const dx = x - leftStick.startX;
-            const dy = y - leftStick.startY;
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const touchX = t.clientX - rect.left;
+            const touchY = t.clientY - rect.top;
+
+            const dx = touchX - centerX;
+            const dy = touchY - centerY;
             const dist = Math.hypot(dx, dy);
-            const maxRadius = 50;
+            const maxRadius = 55;
             const normDist = Math.min(dist, maxRadius);
             const angle = Math.atan2(dy, dx);
 
-            const clampedX = leftStick.startX + Math.cos(angle) * normDist;
-            const clampedY = leftStick.startY + Math.sin(angle) * normDist;
+            const clampedX = centerX + Math.cos(angle) * normDist;
+            const clampedY = centerY + Math.sin(angle) * normDist;
 
+            leftStickRef.current.currX = clampedX;
+            leftStickRef.current.currY = clampedY;
             setLeftStick((prev) => ({ ...prev, currX: clampedX, currY: clampedY }));
-            engine.moveVector = {
-              x: (Math.cos(angle) * normDist) / maxRadius,
-              y: (Math.sin(angle) * normDist) / maxRadius,
-            };
+
+            const moveX = (Math.cos(angle) * normDist) / maxRadius;
+            const moveY = (Math.sin(angle) * normDist) / maxRadius;
+            engine.moveVector = { x: moveX, y: moveY };
 
             // Set visual active direction keys
             setActiveKeys((prev) => ({
               ...prev,
-              w: dy < -10,
-              s: dy > 10,
-              a: dx < -10,
-              d: dx > 10,
+              w: dy < -12,
+              s: dy > 12,
+              a: dx < -12,
+              d: dx > 12,
             }));
             break;
           }
         }
       }
 
-      // 2. Process Right Stick if its touch identifier is moving
-      if (rightTouchIdRef.current !== null && rightTouchRef.current) {
+      // 2. Process Right Stick if its touch identifier is active
+      if (rightTouchIdRef.current !== null && rightTouchRef.current && rightStickRef.current.active) {
         for (let i = 0; i < e.touches.length; i++) {
           const t = e.touches[i];
           if (t.identifier === rightTouchIdRef.current) {
             const rect = rightTouchRef.current.getBoundingClientRect();
-            const x = t.clientX - rect.left;
-            const y = t.clientY - rect.top;
-            const dx = x - rightStick.startX;
-            const dy = y - rightStick.startY;
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const touchX = t.clientX - rect.left;
+            const touchY = t.clientY - rect.top;
+
+            const dx = touchX - centerX;
+            const dy = touchY - centerY;
             const dist = Math.hypot(dx, dy);
             const maxRadius = 55;
             const normDist = Math.min(dist, maxRadius);
             const angle = Math.atan2(dy, dx);
 
-            const clampedX = rightStick.startX + Math.cos(angle) * normDist;
-            const clampedY = rightStick.startY + Math.sin(angle) * normDist;
+            const clampedX = centerX + Math.cos(angle) * normDist;
+            const clampedY = centerY + Math.sin(angle) * normDist;
 
+            rightStickRef.current.currX = clampedX;
+            rightStickRef.current.currY = clampedY;
             setRightStick((prev) => ({ ...prev, currX: clampedX, currY: clampedY }));
 
-            if (dist > 12) {
+            if (dist > 10) {
               engine.aimVector.x = Math.cos(angle);
               engine.aimVector.y = Math.sin(angle);
             }
@@ -372,6 +412,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         for (let i = 0; i < e.changedTouches.length; i++) {
           if (e.changedTouches[i].identifier === leftTouchIdRef.current) {
             leftTouchIdRef.current = null;
+            leftStickRef.current.active = false;
             setLeftStick({ active: false, startX: 0, startY: 0, currX: 0, currY: 0 });
             engine.moveVector = { x: 0, y: 0 };
             setActiveKeys((p) => ({ ...p, w: false, s: false, a: false, d: false }));
@@ -385,9 +426,13 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         for (let i = 0; i < e.changedTouches.length; i++) {
           if (e.changedTouches[i].identifier === rightTouchIdRef.current) {
             rightTouchIdRef.current = null;
+            rightStickRef.current.active = false;
             const duration = Date.now() - rightTouchStartTime.current;
-            const dx = rightStick.currX - rightStick.startX;
-            const dy = rightStick.currY - rightStick.startY;
+            const rect = rightTouchRef.current?.getBoundingClientRect();
+            const centerX = rect ? rect.width / 2 : 0;
+            const centerY = rect ? rect.height / 2 : 0;
+            const dx = rightStickRef.current.currX - centerX;
+            const dy = rightStickRef.current.currY - centerY;
             const dist = Math.hypot(dx, dy);
 
             if (dist < 18 || duration < 190) {
@@ -416,7 +461,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       window.removeEventListener('touchend', onWindowTouchEnd);
       window.removeEventListener('touchcancel', onWindowTouchEnd);
     };
-  }, [engine, leftStick.startX, leftStick.startY, rightStick.startX, rightStick.startY, rightStick.currX, rightStick.currY]);
+  }, [engine]);
 
   // Touch handlers attached directly to joystick zones
   const handleLeftTouchStart = (e: React.TouchEvent) => {
@@ -427,9 +472,29 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
     const rect = leftTouchRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
-    setLeftStick({ active: true, startX: x, startY: y, currX: x, currY: y });
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const touchX = touch.clientX - rect.left;
+    const touchY = touch.clientY - rect.top;
+
+    const dx = touchX - centerX;
+    const dy = touchY - centerY;
+    const dist = Math.hypot(dx, dy);
+    const maxRadius = 55;
+    const normDist = Math.min(dist, maxRadius);
+    const angle = dist > 0 ? Math.atan2(dy, dx) : 0;
+    const currX = centerX + Math.cos(angle) * normDist;
+    const currY = centerY + Math.sin(angle) * normDist;
+
+    leftStickRef.current = { active: true, centerX, centerY, currX, currY };
+    setLeftStick({ active: true, startX: centerX, startY: centerY, currX, currY });
+
+    if (dist > 8) {
+      engine.moveVector = {
+        x: (Math.cos(angle) * normDist) / maxRadius,
+        y: (Math.sin(angle) * normDist) / maxRadius,
+      };
+    }
   };
 
   const handleRightTouchStart = (e: React.TouchEvent) => {
@@ -441,10 +506,27 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
     const rect = rightTouchRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
-    setRightStick({ active: true, startX: x, startY: y, currX: x, currY: y });
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const touchX = touch.clientX - rect.left;
+    const touchY = touch.clientY - rect.top;
+
+    const dx = touchX - centerX;
+    const dy = touchY - centerY;
+    const dist = Math.hypot(dx, dy);
+    const maxRadius = 55;
+    const normDist = Math.min(dist, maxRadius);
+    const angle = dist > 0 ? Math.atan2(dy, dx) : 0;
+    const currX = centerX + Math.cos(angle) * normDist;
+    const currY = centerY + Math.sin(angle) * normDist;
+
+    rightStickRef.current = { active: true, centerX, centerY, currX, currY };
+    setRightStick({ active: true, startX: centerX, startY: centerY, currX, currY });
     engine.aimVector.isAiming = true;
+    if (dist > 10) {
+      engine.aimVector.x = Math.cos(angle);
+      engine.aimVector.y = Math.sin(angle);
+    }
   };
 
   // Dedicated D-Pad Handlers (for mobile & desktop click/touch)
@@ -686,124 +768,52 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               onTouchStart={handleLeftTouchStart}
               className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-slate-900/60 border-2 border-sky-400/50 backdrop-blur-xs touch-none flex items-center justify-center shrink-0 shadow-lg"
             >
-              {/* Visible WASD Keys on the joystick perimeter */}
+              {/* Visible WASD Key Badges on the joystick perimeter (Non-blocking visual guides) */}
               {controls.showVisibleKeys && (
                 <>
                   {/* W Key (Top) */}
-                  <button
-                    onTouchStart={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDpadDirection('up', true);
-                    }}
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDpadDirection('up', false);
-                    }}
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      setDpadDirection('up', true);
-                    }}
-                    onMouseUp={(e) => {
-                      e.stopPropagation();
-                      setDpadDirection('up', false);
-                    }}
-                    className={`absolute top-0.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-auto ${
+                  <div
+                    className={`absolute top-0.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-none ${
                       activeKeys.w || dpadActive.up
                         ? 'bg-sky-400 border-white text-slate-950 scale-125 shadow-sky-400/80 ring-2 ring-white'
-                        : 'bg-slate-900/95 border-sky-400/80 text-sky-200 hover:bg-slate-800'
+                        : 'bg-slate-900/95 border-sky-400/80 text-sky-200'
                     }`}
                   >
                     W ▲
-                  </button>
+                  </div>
 
                   {/* S Key (Bottom) */}
-                  <button
-                    onTouchStart={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDpadDirection('down', true);
-                    }}
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDpadDirection('down', false);
-                    }}
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      setDpadDirection('down', true);
-                    }}
-                    onMouseUp={(e) => {
-                      e.stopPropagation();
-                      setDpadDirection('down', false);
-                    }}
-                    className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-auto ${
+                  <div
+                    className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-none ${
                       activeKeys.s || dpadActive.down
                         ? 'bg-sky-400 border-white text-slate-950 scale-125 shadow-sky-400/80 ring-2 ring-white'
-                        : 'bg-slate-900/95 border-sky-400/80 text-sky-200 hover:bg-slate-800'
+                        : 'bg-slate-900/95 border-sky-400/80 text-sky-200'
                     }`}
                   >
                     S ▼
-                  </button>
+                  </div>
 
                   {/* A Key (Left) */}
-                  <button
-                    onTouchStart={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDpadDirection('left', true);
-                    }}
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDpadDirection('left', false);
-                    }}
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      setDpadDirection('left', true);
-                    }}
-                    onMouseUp={(e) => {
-                      e.stopPropagation();
-                      setDpadDirection('left', false);
-                    }}
-                    className={`absolute left-0.5 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-auto ${
+                  <div
+                    className={`absolute left-0.5 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-none ${
                       activeKeys.a || dpadActive.left
                         ? 'bg-sky-400 border-white text-slate-950 scale-125 shadow-sky-400/80 ring-2 ring-white'
-                        : 'bg-slate-900/95 border-sky-400/80 text-sky-200 hover:bg-slate-800'
+                        : 'bg-slate-900/95 border-sky-400/80 text-sky-200'
                     }`}
                   >
                     ◄ A
-                  </button>
+                  </div>
 
                   {/* D Key (Right) */}
-                  <button
-                    onTouchStart={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDpadDirection('right', true);
-                    }}
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDpadDirection('right', false);
-                    }}
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      setDpadDirection('right', true);
-                    }}
-                    onMouseUp={(e) => {
-                      e.stopPropagation();
-                      setDpadDirection('right', false);
-                    }}
-                    className={`absolute right-0.5 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-auto ${
+                  <div
+                    className={`absolute right-0.5 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-none ${
                       activeKeys.d || dpadActive.right
                         ? 'bg-sky-400 border-white text-slate-950 scale-125 shadow-sky-400/80 ring-2 ring-white'
-                        : 'bg-slate-900/95 border-sky-400/80 text-sky-200 hover:bg-slate-800'
+                        : 'bg-slate-900/95 border-sky-400/80 text-sky-200'
                     }`}
                   >
                     D ►
-                  </button>
+                  </div>
                 </>
               )}
 
@@ -937,18 +947,18 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 e.stopPropagation();
                 engine.usePlayerGadget();
               }}
-              disabled={engine.player.gadgetCharges <= 0}
+              disabled={(gadgetCharges ?? engine.player.gadgetCharges) <= 0}
               className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex flex-col items-center justify-center border-2 sm:border-3 shadow-xl transition active:scale-90 ${
                 activeKeys.e || activeKeys.q
                   ? 'bg-emerald-400 border-white text-slate-950 scale-110 shadow-emerald-400/70'
-                  : engine.player.gadgetCharges > 0
+                  : (gadgetCharges ?? engine.player.gadgetCharges) > 0
                   ? 'bg-emerald-600 border-emerald-300 text-white hover:bg-emerald-500'
                   : 'bg-slate-800 border-slate-600 text-slate-500 opacity-60'
               }`}
             >
               <Shield className="w-4 h-4 sm:w-5 sm:h-5" />
               <span className="text-[8px] sm:text-[9px] font-black tracking-tighter leading-none mt-0.5">
-                GADGET ({engine.player.gadgetCharges})
+                GADGET ({gadgetCharges ?? engine.player.gadgetCharges})
               </span>
             </button>
 

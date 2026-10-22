@@ -41,10 +41,30 @@ export interface PhaserSceneCallbacks {
   onGameOver: (placement: number, kills: number, powerCubes: number) => void;
   onAliveChange: (count: number) => void;
   onKillFeed: (entry: KillFeedEntry) => void;
-  onPlayerHpChange: (hp: number, maxHp: number, ammo: number, superCharge: number, cubes: number) => void;
+  onPlayerHpChange: (hp: number, maxHp: number, ammo: number, superCharge: number, cubes: number, gadgetCharges?: number) => void;
   onPoisonPhaseChange: (phase: number, timeToNext: number) => void;
   onPingChange?: (pingMs: number) => void;
   onFovChange?: (zoom: number, mode: string) => void;
+}
+
+interface ActiveBurst {
+  attackerId: string;
+  brawlerId: BrawlerId;
+  angle: number;
+  bulletsTotal: number;
+  bulletsLeft: number;
+  interval: number;
+  timer: number;
+  isSuper: boolean;
+  damage: number;
+  color: string;
+  bulletType: 'bullet' | 'shotgun' | 'punch' | 'poison' | 'sonic';
+  bulletSpeed: number;
+  bulletRadius: number;
+  range: number;
+  piercing: boolean;
+  destroysWalls: boolean;
+  handOffsetIndex: number;
 }
 
 export class PhaserBattleScene extends Phaser.Scene {
@@ -93,6 +113,8 @@ export class PhaserBattleScene extends Phaser.Scene {
   private powerUpSpawnTimer = 18;
   private isGameOver = false;
   private placementCalculated = false;
+  private activeBursts: ActiveBurst[] = [];
+
   private callbacks: PhaserSceneCallbacks = {
     onGameOver: () => {},
     onAliveChange: () => {},
@@ -102,6 +124,7 @@ export class PhaserBattleScene extends Phaser.Scene {
     onPingChange: () => {},
     onFovChange: () => {},
   };
+
   private selectedBrawlerId: BrawlerId = 'blaze';
   private brawlerLevel: number = 1;
   private playerName: string = 'Brawler';
@@ -154,6 +177,7 @@ export class PhaserBattleScene extends Phaser.Scene {
     if (data) {
       this.init(data);
     }
+
     // 1. Generate map
     this.mapData = generateBattleRoyaleMap();
     this.obstacles = this.mapData.obstacles;
@@ -196,8 +220,9 @@ export class PhaserBattleScene extends Phaser.Scene {
       }) as { [key: string]: Phaser.Input.Keyboard.Key };
     }
 
-    // 6. Setup Pointer/Mouse input
+    // 6. Setup Pointer/Mouse input (Desktop only - touch events are dedicated to GameHUD joysticks)
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.wasTouch || (pointer.event as any)?.pointerType === 'touch') return;
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       this.mousePos.x = worldPoint.x;
       this.mousePos.y = worldPoint.y;
@@ -214,6 +239,7 @@ export class PhaserBattleScene extends Phaser.Scene {
     });
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.wasTouch || (pointer.event as any)?.pointerType === 'touch') return;
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       const dx = worldPoint.x - this.player.x;
       const dy = worldPoint.y - this.player.y;
@@ -226,6 +252,7 @@ export class PhaserBattleScene extends Phaser.Scene {
     });
 
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.wasTouch || (pointer.event as any)?.pointerType === 'touch') return;
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       const dx = worldPoint.x - this.player.x;
       const dy = worldPoint.y - this.player.y;
@@ -373,13 +400,14 @@ export class PhaserBattleScene extends Phaser.Scene {
     this.isHost = this.spawnIndex === 0;
 
     // Initial callbacks
-    this.callbacks?.onAliveChange(10);
-    this.callbacks?.onPlayerHpChange(
+    this.callbacks?.onAliveChange?.(10);
+    this.callbacks?.onPlayerHpChange?.(
       this.player.hp,
       this.player.maxHp,
       this.player.ammo,
       this.player.superCharge,
-      this.player.powerCubes
+      this.player.powerCubes,
+      this.player.gadgetCharges
     );
   }
 
@@ -468,7 +496,7 @@ export class PhaserBattleScene extends Phaser.Scene {
     });
 
     room.onMessage('kill', (k: KillFeedEntry) => {
-      this.callbacks?.onKillFeed(k);
+      this.callbacks?.onKillFeed?.(k);
     });
   }
 
@@ -484,25 +512,31 @@ export class PhaserBattleScene extends Phaser.Scene {
     // 2. Camera tracking
     this.updateCamera();
 
-    // 3. Update Bot AI & Entities
+    // 3. Update Active Burst Attacks (Cadenced bursts for Blaze & Titan)
+    this.updateBursts(dt);
+
+    // 4. Update Bot AI & Entities
     this.updateEntities(dt);
 
-    // 4. Update Poison Zone
+    // 5. Update Poison Zone
     this.updatePoisonZone(dt);
 
-    // 5. Update Projectiles & Collisions
+    // 6. Update Projectiles & Collisions
     this.updateProjectiles(dt);
 
-    // 6. Update Tactical Items & Power Cubes
+    // 7. Update Tactical Items & Power Cubes
     this.updateItems(dt);
 
-    // 7. Sync with Colyseus Room
+    // 8. Update Damage Numbers
+    this.updateDamageNumbers(dt);
+
+    // 9. Sync with Colyseus Room
     this.syncColyseusRoom();
 
-    // 8. Render All Game Objects with Phaser
+    // 10. Render All Game Objects with Phaser
     this.renderPhaserLayers();
 
-    // 9. Check Victory / Game Over
+    // 11. Check Victory / Game Over
     this.checkMatchStatus();
   }
 
@@ -571,17 +605,84 @@ export class PhaserBattleScene extends Phaser.Scene {
     cam.setZoom(this.currentZoom);
   }
 
+  // --- BURST FIRING SYSTEM (RAT-TAT-TAT FOR BLAZE, 1-2 PUNCH COMBO FOR TITAN) ---
+  private updateBursts(dt: number) {
+    for (let i = this.activeBursts.length - 1; i >= 0; i--) {
+      const burst = this.activeBursts[i];
+      burst.timer -= dt;
+
+      if (burst.timer <= 0) {
+        const attacker = this.brawlers.find((b) => b.id === burst.attackerId);
+        if (!attacker || !attacker.isAlive) {
+          this.activeBursts.splice(i, 1);
+          continue;
+        }
+
+        // Alternating gun barrel / left-right fists
+        const handOffset = (burst.handOffsetIndex % 2 === 0 ? 1 : -1) * 7;
+        burst.handOffsetIndex++;
+
+        // Bullets follow strictly the direction angle of the initial shot (parallel strafe spread)
+        const currentAngle = burst.angle;
+
+        const perpX = -Math.sin(currentAngle) * handOffset;
+        const perpY = Math.cos(currentAngle) * handOffset;
+        const startX = attacker.x + Math.cos(currentAngle) * (attacker.radius + 8) + perpX;
+        const startY = attacker.y + Math.sin(currentAngle) * (attacker.radius + 8) + perpY;
+        const speed = burst.bulletSpeed * 60;
+
+        const proj: Projectile = {
+          id: `p_${burst.attackerId}_${Date.now()}_${Math.random()}`,
+          ownerId: burst.attackerId,
+          brawlerId: burst.brawlerId,
+          isSuper: burst.isSuper,
+          x: startX,
+          y: startY,
+          vx: Math.cos(currentAngle) * speed,
+          vy: Math.sin(currentAngle) * speed,
+          distanceTraveled: 0,
+          maxDistance: burst.range,
+          damage: burst.damage,
+          radius: burst.bulletRadius,
+          piercing: burst.piercing,
+          destroysWalls: burst.destroysWalls,
+          color: burst.color,
+          bulletType: burst.bulletType,
+        };
+
+        this.projectiles.push(proj);
+        sound.playShoot(burst.bulletType);
+        attacker.recoilOffset = Math.min(14, attacker.recoilOffset + 4);
+
+        if (attacker.isPlayer && this.colyseusRoom) {
+          this.colyseusRoom.send('projectile', {
+            ...proj,
+            timestamp: Date.now(),
+          });
+        }
+
+        burst.bulletsLeft--;
+        burst.timer = burst.interval;
+
+        if (burst.bulletsLeft <= 0) {
+          this.activeBursts.splice(i, 1);
+        }
+      }
+    }
+  }
+
   private updateEntities(dt: number) {
     this.playerCombatTimer += dt;
     // Passive HP Regeneration when out of combat for 3.2s
     if (this.player.isAlive && this.playerCombatTimer >= 3.2 && this.player.hp < this.player.maxHp) {
       this.player.hp = Math.min(this.player.maxHp, this.player.hp + this.player.maxHp * 0.14 * dt);
-      this.callbacks?.onPlayerHpChange(
+      this.callbacks?.onPlayerHpChange?.(
         this.player.hp,
         this.player.maxHp,
         this.player.ammo,
         this.player.superCharge,
-        this.player.powerCubes
+        this.player.powerCubes,
+        this.player.gadgetCharges
       );
     }
 
@@ -595,17 +696,29 @@ export class PhaserBattleScene extends Phaser.Scene {
       if (brawler.shieldTimer > 0) brawler.shieldTimer = Math.max(0, brawler.shieldTimer - dt);
       if (brawler.doubleDamageTimer > 0) brawler.doubleDamageTimer = Math.max(0, brawler.doubleDamageTimer - dt);
 
+      // Crow's Poison Damage Over Time
+      if (brawler.poisonTicksLeft > 0) {
+        brawler.poisonDamageTimer = (brawler.poisonDamageTimer || 0) + dt;
+        if (brawler.poisonDamageTimer >= 0.75) {
+          brawler.poisonDamageTimer = 0;
+          brawler.poisonTicksLeft--;
+          this.applyDamage(brawler, brawler.poisonDamage || 160, brawler.poisonAttackerId || 'poison', false, '#10b981');
+          sound.playHit();
+        }
+      }
+
       // Ammo reload
       const bDef = BRAWLERS[brawler.brawlerId];
       if (brawler.ammo < brawler.maxAmmo) {
         brawler.ammo = Math.min(brawler.maxAmmo, brawler.ammo + dt / bDef.reloadTime);
         if (brawler.isPlayer) {
-          this.callbacks?.onPlayerHpChange(
+          this.callbacks?.onPlayerHpChange?.(
             brawler.hp,
             brawler.maxHp,
             brawler.ammo,
             brawler.superCharge,
-            brawler.powerCubes
+            brawler.powerCubes,
+            brawler.gadgetCharges
           );
         }
       }
@@ -778,7 +891,7 @@ export class PhaserBattleScene extends Phaser.Scene {
       } else if (this.poisonZone.phase >= 4) {
         this.poisonZone.targetRadius = 150;
       }
-      this.callbacks?.onPoisonPhaseChange(this.poisonZone.phase, Math.round(this.poisonZone.phaseTimer));
+      this.callbacks?.onPoisonPhaseChange?.(this.poisonZone.phase, Math.round(this.poisonZone.phaseTimer));
     }
 
     // Apply poison damage ticks
@@ -813,17 +926,53 @@ export class PhaserBattleScene extends Phaser.Scene {
         continue;
       }
 
-      // Check wall collision
+      // Check wall / obstacle collision
       let hitObstacle = false;
-      for (const obs of this.obstacles) {
+      for (let oi = this.obstacles.length - 1; oi >= 0; oi--) {
+        const obs = this.obstacles[oi];
         if (obs.type === 'water') continue;
-        if (p.x >= obs.x && p.x <= obs.x + obs.width && p.y >= obs.y && p.y <= obs.y + obs.height) {
+        if (
+          p.x + p.radius >= obs.x &&
+          p.x - p.radius <= obs.x + obs.width &&
+          p.y + p.radius >= obs.y &&
+          p.y - p.radius <= obs.y + obs.height
+        ) {
           hitObstacle = true;
+
+          // Wall-breaking Super (Colt Super, Shelly Super, Titan Super)
           if (p.destroysWalls && obs.destructible) {
+            this.obstacles.splice(oi, 1);
+            sound.playExplosion();
+            this.cameras.main.shake(120, 0.012);
+            this.damageNumbers.push({
+              id: Math.random().toString(),
+              x: obs.x + obs.width / 2,
+              y: obs.y - 10,
+              text: 'MURO FRANTUMATO!',
+              color: '#f97316',
+              scale: 1.2,
+              life: 1.0,
+              isHeal: false,
+            });
+          }
+          // Normal bullet attack against destructible wooden crates / obstacles
+          else if (obs.destructible) {
             obs.hp = (obs.hp || 400) - p.damage;
+            sound.playHit();
+            this.damageNumbers.push({
+              id: Math.random().toString(),
+              x: obs.x + obs.width / 2,
+              y: obs.y - 8,
+              text: String(p.damage),
+              color: '#d97706',
+              scale: 1.0,
+              life: 0.8,
+              isHeal: false,
+            });
+
             if (obs.hp <= 0) {
-              const obsIdx = this.obstacles.indexOf(obs);
-              if (obsIdx !== -1) this.obstacles.splice(obsIdx, 1);
+              this.obstacles.splice(oi, 1);
+              sound.playExplosion();
             }
           }
           break;
@@ -840,19 +989,47 @@ export class PhaserBattleScene extends Phaser.Scene {
       for (const box of this.powerBoxes) {
         if (box.isDestroyed) continue;
         if (
-          p.x >= box.x &&
-          p.x <= box.x + box.width &&
-          p.y >= box.y &&
-          p.y <= box.y + box.height
+          p.x + p.radius >= box.x &&
+          p.x - p.radius <= box.x + box.width &&
+          p.y + p.radius >= box.y &&
+          p.y - p.radius <= box.y + box.height
         ) {
           box.hp = Math.max(0, box.hp - p.damage);
           sound.playHit();
           hitBox = true;
 
+          // Pop floating damage number directly on the power box
+          this.damageNumbers.push({
+            id: Math.random().toString(),
+            x: box.x + box.width / 2 + (Math.random() - 0.5) * 20,
+            y: box.y - 12,
+            text: String(p.damage),
+            color: '#fbbf24',
+            scale: 1.1,
+            life: 0.9,
+            isHeal: false,
+          });
+
+          // Award small Super charge when shooting boxes
+          const shooter = this.brawlers.find((b) => b.id === p.ownerId);
+          if (shooter) {
+            shooter.superCharge = Math.min(100, shooter.superCharge + 8);
+            if (shooter.isPlayer) {
+              this.callbacks?.onPlayerHpChange?.(
+                shooter.hp,
+                shooter.maxHp,
+                shooter.ammo,
+                shooter.superCharge,
+                shooter.powerCubes
+              );
+            }
+          }
+
           if (box.hp <= 0) {
             box.isDestroyed = true;
             this.spawnPowerCubes(box.x + box.width / 2, box.y + box.height / 2, box.cubesToDrop);
             sound.playExplosion();
+            this.cameras.main.shake(160, 0.012);
             if (this.colyseusRoom) {
               this.colyseusRoom.send('box_destroyed', { boxId: box.id });
             }
@@ -875,17 +1052,31 @@ export class PhaserBattleScene extends Phaser.Scene {
           this.applyDamage(brawler, p.damage, p.ownerId, p.isSuper, p.color);
           hitBrawler = true;
 
+          // Crow Poison application
+          if (p.bulletType === 'poison') {
+            brawler.poisonTicksLeft = 4;
+            brawler.poisonDamage = Math.max(90, Math.round(p.damage * 0.35));
+            brawler.poisonAttackerId = p.ownerId;
+          }
+
+          // Viper Knockback on Super
+          if (p.isSuper && p.brawlerId === 'viper') {
+            const knockAngle = Math.atan2(p.vy, p.vx);
+            this.moveEntityWithCollision(brawler, Math.cos(knockAngle) * 55, Math.sin(knockAngle) * 55);
+          }
+
           // Charge shooter super
           const shooter = this.brawlers.find((b) => b.id === p.ownerId);
           if (shooter) {
             shooter.superCharge = Math.min(100, shooter.superCharge + 28);
             if (shooter.isPlayer) {
-              this.callbacks?.onPlayerHpChange(
+              this.callbacks?.onPlayerHpChange?.(
                 shooter.hp,
                 shooter.maxHp,
                 shooter.ammo,
                 shooter.superCharge,
-                shooter.powerCubes
+                shooter.powerCubes,
+                shooter.gadgetCharges
               );
             }
           }
@@ -913,12 +1104,13 @@ export class PhaserBattleScene extends Phaser.Scene {
 
           if (brawler.isPlayer) {
             sound.playPowerCube();
-            this.callbacks?.onPlayerHpChange(
+            this.callbacks?.onPlayerHpChange?.(
               brawler.hp,
               brawler.maxHp,
               brawler.ammo,
               brawler.superCharge,
-              brawler.powerCubes
+              brawler.powerCubes,
+              brawler.gadgetCharges
             );
           }
           this.powerCubes.splice(i, 1);
@@ -943,12 +1135,13 @@ export class PhaserBattleScene extends Phaser.Scene {
 
           if (brawler.isPlayer) {
             sound.playPowerUp();
-            this.callbacks?.onPlayerHpChange(
+            this.callbacks?.onPlayerHpChange?.(
               brawler.hp,
               brawler.maxHp,
               brawler.ammo,
               brawler.superCharge,
-              brawler.powerCubes
+              brawler.powerCubes,
+              brawler.gadgetCharges
             );
           }
           this.powerUps.splice(i, 1);
@@ -962,6 +1155,17 @@ export class PhaserBattleScene extends Phaser.Scene {
     if (this.powerUpSpawnTimer <= 0) {
       this.powerUpSpawnTimer = 16;
       this.spawnRandomPowerUp();
+    }
+  }
+
+  private updateDamageNumbers(dt: number) {
+    for (let i = this.damageNumbers.length - 1; i >= 0; i--) {
+      const dn = this.damageNumbers[i];
+      dn.life -= dt * 1.4;
+      dn.y -= 45 * dt;
+      if (dn.life <= 0) {
+        this.damageNumbers.splice(i, 1);
+      }
     }
   }
 
@@ -1002,7 +1206,7 @@ export class PhaserBattleScene extends Phaser.Scene {
     }
   }
 
-  // --- ATTACKS & ACTIONS ---
+  // --- ATTACKS & ACTIONS (UNIQUELY CUSTOMIZED FOR EACH BRAWLER) ---
   public firePlayerNormalAttack(angle?: number) {
     if (!this.player.isAlive || this.player.isLeaping) return;
     if (this.player.ammo < 1) return;
@@ -1030,9 +1234,141 @@ export class PhaserBattleScene extends Phaser.Scene {
   }
 
   public usePlayerGadget() {
-    if (!this.player.isAlive) return;
-    this.player.speedBoostTimer = 4;
-    sound.playPowerUp();
+    if (!this.player.isAlive || this.player.isLeaping) return;
+    if (this.player.gadgetCharges <= 0) return;
+
+    this.player.gadgetCharges--;
+    const bId = this.player.brawlerId;
+
+    // 1. BLAZE (Colt) -> Ricarica Rapida: Instant +2 ammo reloads
+    if (bId === 'blaze') {
+      this.player.ammo = Math.min(this.player.maxAmmo, this.player.ammo + 2);
+      sound.playUnlockJingle();
+      this.damageNumbers.push({
+        id: Math.random().toString(),
+        x: this.player.x,
+        y: this.player.y - this.player.radius - 20,
+        text: '+2 MUNIZIONI!',
+        color: '#fbbf24',
+        scale: 1.3,
+        life: 1.2,
+        isHeal: true,
+      });
+    }
+    // 2. VIPER (Shelly) -> Scatto Tattico: Instant tactical forward dash
+    else if (bId === 'viper') {
+      const dashAngle = this.player.rotation;
+      const dashDist = 200;
+      this.moveEntityWithCollision(
+        this.player,
+        Math.cos(dashAngle) * dashDist,
+        Math.sin(dashAngle) * dashDist
+      );
+      this.player.speedBoostTimer = 3;
+      sound.playPowerUp();
+      this.damageNumbers.push({
+        id: Math.random().toString(),
+        x: this.player.x,
+        y: this.player.y - this.player.radius - 20,
+        text: 'SCATTO TATTICO!',
+        color: '#a855f7',
+        scale: 1.3,
+        life: 1.2,
+        isHeal: false,
+      });
+    }
+    // 3. TITAN (El Primo) -> Onda Sismica: Ground stomp shockwave slow & box crack
+    else if (bId === 'titan') {
+      sound.playExplosion();
+      this.cameras.main.shake(220, 0.015);
+      const radius = 220;
+
+      for (const target of this.brawlers) {
+        if (target.id === this.player.id || !target.isAlive) continue;
+        const d = Math.hypot(target.x - this.player.x, target.y - this.player.y);
+        if (d <= radius) {
+          this.applyDamage(target, 600, this.player.id, false, '#3b82f6');
+          target.speedBoostTimer = -2.5; // slow
+        }
+      }
+
+      // Crack nearby boxes in range
+      for (const box of this.powerBoxes) {
+        if (box.isDestroyed) continue;
+        const d = Math.hypot(box.x + box.width / 2 - this.player.x, box.y + box.height / 2 - this.player.y);
+        if (d <= radius) {
+          box.hp = Math.max(0, box.hp - 800);
+          if (box.hp <= 0) {
+            box.isDestroyed = true;
+            this.spawnPowerCubes(box.x + box.width / 2, box.y + box.height / 2, box.cubesToDrop);
+            sound.playExplosion();
+          }
+        }
+      }
+
+      // Shatter nearby crates/destructible walls
+      for (let i = this.obstacles.length - 1; i >= 0; i--) {
+        const obs = this.obstacles[i];
+        if (obs.destructible) {
+          const d = Math.hypot(obs.x + obs.width / 2 - this.player.x, obs.y + obs.height / 2 - this.player.y);
+          if (d <= radius) {
+            this.obstacles.splice(i, 1);
+          }
+        }
+      }
+
+      this.damageNumbers.push({
+        id: Math.random().toString(),
+        x: this.player.x,
+        y: this.player.y - this.player.radius - 20,
+        text: 'ONDA SISMICA!',
+        color: '#3b82f6',
+        scale: 1.3,
+        life: 1.2,
+        isHeal: false,
+      });
+    }
+    // 4. RAVEN (Crow) -> Scudo d'Ombra: 50% damage reduction for 4s
+    else if (bId === 'raven') {
+      this.player.shieldTimer = 4.0;
+      this.player.shieldRatio = 0.50;
+      sound.playPowerUp();
+      this.damageNumbers.push({
+        id: Math.random().toString(),
+        x: this.player.x,
+        y: this.player.y - this.player.radius - 20,
+        text: 'SCUDO D\'OMBRA!',
+        color: '#eab308',
+        scale: 1.3,
+        life: 1.2,
+        isHeal: true,
+      });
+    }
+    // 5. HARMONY (Poco) -> Risonanza Protettiva: Cleanse + 1200 HP
+    else if (bId === 'harmony') {
+      this.player.poisonTicksLeft = 0;
+      this.player.poisonDamage = 0;
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 1200);
+      sound.playUnlockJingle();
+      this.damageNumbers.push({
+        id: Math.random().toString(),
+        x: this.player.x,
+        y: this.player.y - this.player.radius - 20,
+        text: '+1200 HP CURA!',
+        color: '#10b981',
+        scale: 1.4,
+        life: 1.2,
+        isHeal: true,
+      });
+    }
+
+    this.callbacks?.onPlayerHpChange?.(
+      this.player.hp,
+      this.player.maxHp,
+      this.player.ammo,
+      this.player.superCharge,
+      this.player.powerCubes
+    );
   }
 
   public adjustZoom(delta: number) {
@@ -1051,7 +1387,7 @@ export class PhaserBattleScene extends Phaser.Scene {
   private executeNormalAttack(attacker: BrawlerEntity, angle: number) {
     attacker.ammo = Math.max(0, attacker.ammo - 1);
     attacker.rotation = angle;
-    attacker.recoilOffset = 12;
+    attacker.recoilOffset = 14;
 
     const def = BRAWLERS[attacker.brawlerId];
     let damage = Math.round(def.attackDamage * (1 + attacker.powerCubes * 0.1));
@@ -1059,41 +1395,155 @@ export class PhaserBattleScene extends Phaser.Scene {
 
     sound.playShoot(def.bulletType);
 
-    // Multi-shot logic
-    const count = def.bulletCount || 1;
-    const spread = def.attackSpread || 0;
-    const startAngle = count > 1 ? angle - spread / 2 : angle;
-    const step = count > 1 ? spread / (count - 1) : 0;
+    // 1. BLAZE (Colt) -> 6 RAPID-FIRE TRACER BULLETS IN SEQUENCE
+    if (attacker.brawlerId === 'blaze') {
+      this.activeBursts.push({
+        attackerId: attacker.id,
+        brawlerId: attacker.brawlerId,
+        angle,
+        bulletsTotal: 6,
+        bulletsLeft: 6,
+        interval: 0.065, // rapid rat-tat-tat cadence
+        timer: 0, // first bullet fires immediately
+        isSuper: false,
+        damage,
+        color: '#ef4444',
+        bulletType: 'bullet',
+        bulletSpeed: 19,
+        bulletRadius: 5,
+        range: 560,
+        piercing: false,
+        destroysWalls: false,
+        handOffsetIndex: 0,
+      });
+      return;
+    }
 
-    for (let i = 0; i < count; i++) {
-      const curAngle = startAngle + step * i;
-      const speed = def.bulletSpeed * 60;
+    // 2. TITAN (El Primo) -> 4 RAPID 1-2 PUNCH COMBO SHOCKWAVES
+    if (attacker.brawlerId === 'titan') {
+      this.activeBursts.push({
+        attackerId: attacker.id,
+        brawlerId: attacker.brawlerId,
+        angle,
+        bulletsTotal: 4,
+        bulletsLeft: 4,
+        interval: 0.085, // 1-2 punch rhythm
+        timer: 0,
+        isSuper: false,
+        damage,
+        color: '#3b82f6',
+        bulletType: 'punch',
+        bulletSpeed: 15,
+        bulletRadius: 10,
+        range: 130, // short melee range
+        piercing: false,
+        destroysWalls: false,
+        handOffsetIndex: 0,
+      });
+      return;
+    }
+
+    // 3. VIPER (Shelly) -> INSTANT SHOTGUN BUCKSHOT SPRAY (10 PELLETS)
+    if (attacker.brawlerId === 'viper') {
+      const count = 10;
+      const spread = 0.42;
+      const startAngle = angle - spread / 2;
+      const step = spread / (count - 1);
+
+      for (let i = 0; i < count; i++) {
+        // slight natural angle & speed variance
+        const curAngle = startAngle + step * i + (Math.random() - 0.5) * 0.05;
+        const speedVar = 1 + (Math.random() - 0.5) * 0.15;
+        const speed = def.bulletSpeed * 60 * speedVar;
+
+        const proj: Projectile = {
+          id: `p_${attacker.id}_${Date.now()}_${i}`,
+          ownerId: attacker.id,
+          brawlerId: attacker.brawlerId,
+          x: attacker.x + Math.cos(curAngle) * (attacker.radius + 8),
+          y: attacker.y + Math.sin(curAngle) * (attacker.radius + 8),
+          vx: Math.cos(curAngle) * speed,
+          vy: Math.sin(curAngle) * speed,
+          distanceTraveled: 0,
+          maxDistance: 350 + (Math.random() - 0.5) * 40,
+          damage,
+          radius: 6,
+          piercing: false,
+          destroysWalls: false,
+          color: '#a855f7',
+          bulletType: 'shotgun',
+          isSuper: false,
+        };
+
+        this.projectiles.push(proj);
+
+        if (attacker.isPlayer && this.colyseusRoom) {
+          this.colyseusRoom.send('projectile', { ...proj, timestamp: Date.now() });
+        }
+      }
+      return;
+    }
+
+    // 4. RAVEN (Crow) -> 3 SHARP POISON KUNAI DAGGER FAN
+    if (attacker.brawlerId === 'raven') {
+      const angles = [angle - 0.16, angle, angle + 0.16];
+      for (let i = 0; i < angles.length; i++) {
+        const curAngle = angles[i];
+        const speed = def.bulletSpeed * 60;
+        const proj: Projectile = {
+          id: `p_${attacker.id}_${Date.now()}_${i}`,
+          ownerId: attacker.id,
+          brawlerId: attacker.brawlerId,
+          x: attacker.x + Math.cos(curAngle) * (attacker.radius + 8),
+          y: attacker.y + Math.sin(curAngle) * (attacker.radius + 8),
+          vx: Math.cos(curAngle) * speed,
+          vy: Math.sin(curAngle) * speed,
+          distanceTraveled: 0,
+          maxDistance: 500,
+          damage,
+          radius: 5,
+          piercing: false,
+          destroysWalls: false,
+          color: '#eab308',
+          bulletType: 'poison',
+          isSuper: false,
+        };
+
+        this.projectiles.push(proj);
+
+        if (attacker.isPlayer && this.colyseusRoom) {
+          this.colyseusRoom.send('projectile', { ...proj, timestamp: Date.now() });
+        }
+      }
+      return;
+    }
+
+    // 5. HARMONY (Poco) -> WIDE WALL-PENETRATING ACOUSTIC CRESCENT WAVE
+    if (attacker.brawlerId === 'harmony') {
+      const speed = def.bulletSpeed * 58;
       const proj: Projectile = {
-        id: `p_${attacker.id}_${Date.now()}_${Math.random()}`,
+        id: `p_${attacker.id}_${Date.now()}`,
         ownerId: attacker.id,
         brawlerId: attacker.brawlerId,
-        x: attacker.x + Math.cos(curAngle) * (attacker.radius + 8),
-        y: attacker.y + Math.sin(curAngle) * (attacker.radius + 8),
-        vx: Math.cos(curAngle) * speed,
-        vy: Math.sin(curAngle) * speed,
+        x: attacker.x + Math.cos(angle) * (attacker.radius + 12),
+        y: attacker.y + Math.sin(angle) * (attacker.radius + 12),
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
         distanceTraveled: 0,
-        maxDistance: def.attackRange,
+        maxDistance: 460,
         damage,
-        radius: def.bulletRadius,
-        piercing: def.bulletType === 'sonic',
+        radius: 36, // wide wave
+        piercing: true, // pierces everything!
         destroysWalls: false,
-        color: def.color,
-        bulletType: def.bulletType,
+        color: '#10b981',
+        bulletType: 'sonic',
         isSuper: false,
       };
 
       this.projectiles.push(proj);
 
       if (attacker.isPlayer && this.colyseusRoom) {
-        this.colyseusRoom.send('projectile', {
-          ...proj,
-          timestamp: Date.now(),
-        });
+        this.colyseusRoom.send('projectile', { ...proj, timestamp: Date.now() });
       }
     }
   }
@@ -1101,15 +1551,42 @@ export class PhaserBattleScene extends Phaser.Scene {
   private executeSuper(attacker: BrawlerEntity, angle: number) {
     attacker.superCharge = 0;
     attacker.rotation = angle;
-    attacker.recoilOffset = 18;
+    attacker.recoilOffset = 20;
 
     const def = BRAWLERS[attacker.brawlerId];
     sound.playSuperCast();
     this.cameras.main.shake(180, 0.015);
 
+    let damage = Math.round(def.superDamage * (1 + attacker.powerCubes * 0.1));
+    if (attacker.doubleDamageTimer > 0) damage *= 2;
+
+    // 1. BLAZE (Colt) -> 12 HEAVY PIERCING LASER BOLTS IN A BLISTERING BARRAGE
+    if (attacker.brawlerId === 'blaze') {
+      this.activeBursts.push({
+        attackerId: attacker.id,
+        brawlerId: attacker.brawlerId,
+        angle,
+        bulletsTotal: 12,
+        bulletsLeft: 12,
+        interval: 0.045, // blistering speed
+        timer: 0,
+        isSuper: true,
+        damage,
+        color: '#fbbf24',
+        bulletType: 'bullet',
+        bulletSpeed: 23,
+        bulletRadius: 8,
+        range: 640,
+        piercing: true,
+        destroysWalls: true,
+        handOffsetIndex: 0,
+      });
+      return;
+    }
+
+    // 2. TITAN (El Primo) -> METEOR LEAP & GROUND CRATER SLAM
     if (attacker.brawlerId === 'titan') {
-      // Leap Super
-      const leapDist = Math.min(def.superRange, 420);
+      const leapDist = Math.min(def.superRange, 440);
       attacker.isLeaping = true;
       attacker.leapProgress = 0;
       attacker.leapStartX = attacker.x;
@@ -1119,43 +1596,113 @@ export class PhaserBattleScene extends Phaser.Scene {
       return;
     }
 
-    let damage = Math.round(def.superDamage * (1 + attacker.powerCubes * 0.1));
-    if (attacker.doubleDamageTimer > 0) damage *= 2;
+    // 3. VIPER (Shelly) -> SUPER CALIBRO: 14 WALL-SHREDDING KNOCKBACK PELLETS
+    if (attacker.brawlerId === 'viper') {
+      const count = 14;
+      const spread = 0.55;
+      const startAngle = angle - spread / 2;
+      const step = spread / (count - 1);
 
-    const count = def.superType === 'daggers' ? 8 : 1;
-    const spread = Math.PI / 4;
-    const startAngle = count > 1 ? angle - spread / 2 : angle;
-    const step = count > 1 ? spread / (count - 1) : 0;
+      for (let i = 0; i < count; i++) {
+        const curAngle = startAngle + step * i;
+        const speed = def.bulletSpeed * 68;
+        const proj: Projectile = {
+          id: `super_viper_${attacker.id}_${Date.now()}_${i}`,
+          ownerId: attacker.id,
+          brawlerId: attacker.brawlerId,
+          isSuper: true,
+          x: attacker.x + Math.cos(curAngle) * (attacker.radius + 12),
+          y: attacker.y + Math.sin(curAngle) * (attacker.radius + 12),
+          vx: Math.cos(curAngle) * speed,
+          vy: Math.sin(curAngle) * speed,
+          distanceTraveled: 0,
+          maxDistance: 420,
+          damage,
+          radius: 10,
+          piercing: true,
+          destroysWalls: true,
+          color: '#fbbf24',
+          bulletType: 'shotgun',
+        };
 
-    for (let i = 0; i < count; i++) {
-      const curAngle = startAngle + step * i;
-      const speed = def.bulletSpeed * 68;
-      const proj: Projectile = {
-        id: `super_${attacker.id}_${Date.now()}_${Math.random()}`,
-        ownerId: attacker.id,
-        brawlerId: attacker.brawlerId,
-        isSuper: true,
-        x: attacker.x + Math.cos(curAngle) * (attacker.radius + 12),
-        y: attacker.y + Math.sin(curAngle) * (attacker.radius + 12),
-        vx: Math.cos(curAngle) * speed,
-        vy: Math.sin(curAngle) * speed,
-        distanceTraveled: 0,
-        maxDistance: def.superRange,
-        damage,
-        radius: def.bulletRadius * 1.6,
-        piercing: true,
-        destroysWalls: true,
-        color: '#fbbf24',
-        bulletType: def.bulletType,
-      };
+        this.projectiles.push(proj);
 
-      this.projectiles.push(proj);
+        if (attacker.isPlayer && this.colyseusRoom) {
+          this.colyseusRoom.send('projectile', { ...proj, timestamp: Date.now() });
+        }
+      }
+      return;
+    }
 
-      if (attacker.isPlayer && this.colyseusRoom) {
-        this.colyseusRoom.send('projectile', {
-          ...proj,
-          timestamp: Date.now(),
+    // 4. RAVEN (Crow) -> SALTO DEL CORVO: 360-DEGREE RADIAL DAGGER STORM
+    if (attacker.brawlerId === 'raven') {
+      for (let i = 0; i < 14; i++) {
+        const radAngle = (Math.PI * 2 * i) / 14;
+        const speed = def.bulletSpeed * 65;
+        this.projectiles.push({
+          id: `super_raven_${attacker.id}_${Date.now()}_${i}`,
+          ownerId: attacker.id,
+          brawlerId: attacker.brawlerId,
+          isSuper: true,
+          x: attacker.x + Math.cos(radAngle) * 20,
+          y: attacker.y + Math.sin(radAngle) * 20,
+          vx: Math.cos(radAngle) * speed,
+          vy: Math.sin(radAngle) * speed,
+          distanceTraveled: 0,
+          maxDistance: 450,
+          damage,
+          radius: 7,
+          piercing: false,
+          destroysWalls: false,
+          color: '#eab308',
+          bulletType: 'poison',
         });
+      }
+
+      // Leap forward
+      const leapDist = Math.min(def.superRange, 460);
+      attacker.isLeaping = true;
+      attacker.leapProgress = 0;
+      attacker.leapStartX = attacker.x;
+      attacker.leapStartY = attacker.y;
+      attacker.leapTargetX = attacker.x + Math.cos(angle) * leapDist;
+      attacker.leapTargetY = attacker.y + Math.sin(angle) * leapDist;
+      return;
+    }
+
+    // 5. HARMONY (Poco) -> SERENATA CURATIVA (+2500 HP TEAM HEAL)
+    if (attacker.brawlerId === 'harmony') {
+      sound.playUnlockJingle();
+      this.cameras.main.shake(150, 0.01);
+      attacker.hp = Math.min(attacker.maxHp, attacker.hp + 2500);
+
+      for (const b of this.brawlers) {
+        if (!b.isAlive) continue;
+        const d = Math.hypot(b.x - attacker.x, b.y - attacker.y);
+        if (d < 450) {
+          b.hp = Math.min(b.maxHp, b.hp + 2500);
+          this.damageNumbers.push({
+            id: Math.random().toString(),
+            x: b.x,
+            y: b.y - b.radius - 15,
+            text: '+2500 HP',
+            color: '#22c55e',
+            scale: 1.4,
+            life: 1,
+            isHeal: true,
+          });
+        }
+      }
+
+      if (attacker.isPlayer) {
+        this.callbacks?.onPlayerHpChange?.(
+          attacker.hp,
+          attacker.maxHp,
+          attacker.ammo,
+          attacker.superCharge,
+          attacker.powerCubes,
+          attacker.gadgetCharges
+        );
       }
     }
   }
@@ -1163,7 +1710,38 @@ export class PhaserBattleScene extends Phaser.Scene {
   private triggerLeapImpact(brawler: BrawlerEntity) {
     sound.playExplosion();
     this.cameras.main.shake(250, 0.02);
-    const radius = 160;
+
+    if (brawler.brawlerId === 'raven') {
+      // Raven second radial dagger storm upon landing!
+      const def = BRAWLERS['raven'];
+      let damage = Math.round(def.superDamage * (1 + brawler.powerCubes * 0.1));
+      for (let i = 0; i < 14; i++) {
+        const radAngle = (Math.PI * 2 * i) / 14;
+        const speed = def.bulletSpeed * 65;
+        this.projectiles.push({
+          id: `super_raven_land_${brawler.id}_${Date.now()}_${i}`,
+          ownerId: brawler.id,
+          brawlerId: brawler.brawlerId,
+          isSuper: true,
+          x: brawler.x + Math.cos(radAngle) * 20,
+          y: brawler.y + Math.sin(radAngle) * 20,
+          vx: Math.cos(radAngle) * speed,
+          vy: Math.sin(radAngle) * speed,
+          distanceTraveled: 0,
+          maxDistance: 450,
+          damage,
+          radius: 7,
+          piercing: false,
+          destroysWalls: false,
+          color: '#eab308',
+          bulletType: 'poison',
+        });
+      }
+      return;
+    }
+
+    // Titan Ground Slam Crater
+    const radius = 170;
     const def = BRAWLERS[brawler.brawlerId];
     const damage = Math.round(def.superDamage * (1 + brawler.powerCubes * 0.1));
 
@@ -1172,6 +1750,36 @@ export class PhaserBattleScene extends Phaser.Scene {
       const dist = Math.hypot(target.x - brawler.x, target.y - brawler.y);
       if (dist <= radius) {
         this.applyDamage(target, damage, brawler.id, true, '#ef4444');
+      }
+    }
+
+    // Destroy obstacles in crater
+    for (let i = this.obstacles.length - 1; i >= 0; i--) {
+      const obs = this.obstacles[i];
+      if (obs.destructible) {
+        const ocx = obs.x + obs.width / 2;
+        const ocy = obs.y + obs.height / 2;
+        if (Math.hypot(ocx - brawler.x, ocy - brawler.y) <= radius + 30) {
+          this.obstacles.splice(i, 1);
+        }
+      }
+    }
+
+    // Damage power boxes in crater
+    for (const box of this.powerBoxes) {
+      if (box.isDestroyed) continue;
+      const ocx = box.x + box.width / 2;
+      const ocy = box.y + box.height / 2;
+      if (Math.hypot(ocx - brawler.x, ocy - brawler.y) <= radius + 30) {
+        box.hp = Math.max(0, box.hp - damage);
+        if (box.hp <= 0) {
+          box.isDestroyed = true;
+          this.spawnPowerCubes(box.x + box.width / 2, box.y + box.height / 2, box.cubesToDrop);
+          sound.playExplosion();
+          if (this.colyseusRoom) {
+            this.colyseusRoom.send('box_destroyed', { boxId: box.id });
+          }
+        }
       }
     }
   }
@@ -1207,12 +1815,13 @@ export class PhaserBattleScene extends Phaser.Scene {
       this.playerCombatTimer = 0;
       sound.playHit();
       this.cameras.main.shake(120, 0.008);
-      this.callbacks?.onPlayerHpChange(
+      this.callbacks?.onPlayerHpChange?.(
         target.hp,
         target.maxHp,
         target.ammo,
         target.superCharge,
-        target.powerCubes
+        target.powerCubes,
+        target.gadgetCharges
       );
     }
 
@@ -1235,9 +1844,9 @@ export class PhaserBattleScene extends Phaser.Scene {
         time: Date.now(),
       };
 
-      this.callbacks?.onKillFeed(killEntry);
+      this.callbacks?.onKillFeed?.(killEntry);
       const aliveCount = this.brawlers.filter((b) => b.isAlive).length;
-      this.callbacks?.onAliveChange(aliveCount);
+      this.callbacks?.onAliveChange?.(aliveCount);
     }
   }
 
@@ -1306,6 +1915,27 @@ export class PhaserBattleScene extends Phaser.Scene {
       }
     }
 
+    // Power boxes also block entities while intact; once destroyed, entities can walk through
+    for (const box of this.powerBoxes) {
+      if (box.isDestroyed) continue;
+      if (
+        boundedX + r > box.x &&
+        boundedX - r < box.x + box.width &&
+        entity.y + r > box.y &&
+        entity.y - r < box.y + box.height
+      ) {
+        collidesX = true;
+      }
+      if (
+        entity.x + r > box.x &&
+        entity.x - r < box.x + box.width &&
+        boundedY + r > box.y &&
+        boundedY - r < box.y + box.height
+      ) {
+        collidesY = true;
+      }
+    }
+
     if (!collidesX) entity.x = boundedX;
     if (!collidesY) entity.y = boundedY;
   }
@@ -1361,16 +1991,16 @@ export class PhaserBattleScene extends Phaser.Scene {
       this.placementCalculated = true;
       this.isGameOver = true;
       sound.playHit();
-      this.callbacks?.onGameOver(aliveCount + 1, this.player.kills, this.player.powerCubes);
+      this.callbacks?.onGameOver?.(aliveCount + 1, this.player.kills, this.player.powerCubes);
     } else if (aliveCount === 1 && this.player.isAlive) {
       this.placementCalculated = true;
       this.isGameOver = true;
       sound.playVictory();
-      this.callbacks?.onGameOver(1, this.player.kills, this.player.powerCubes);
+      this.callbacks?.onGameOver?.(1, this.player.kills, this.player.powerCubes);
     }
   }
 
-  // --- PHASER GRAPHICS RENDERING (REPLACES REACT/CANVAS 2D) ---
+  // --- PHASER GRAPHICS RENDERING (WITH DISTINCT CUSTOM SHAPES & COMIC POP NUMBERS) ---
   private renderGround() {
     const g = this.groundGraphics;
     g.clear();
@@ -1507,14 +2137,122 @@ export class PhaserBattleScene extends Phaser.Scene {
       this.itemGraphics.strokeCircle(pu.x, pu.y + bob, pu.radius);
     }
 
-    // 5. Projectiles
+    // 5. DISTINCT CUSTOM PROJECTILES PER BRAWLER
     this.projectileGraphics.clear();
     for (const p of this.projectiles) {
+      const ang = Math.atan2(p.vy, p.vx);
       const colorNum = parseInt(p.color.replace('#', ''), 16) || 0xf97316;
-      this.projectileGraphics.fillStyle(colorNum, 1);
-      this.projectileGraphics.fillCircle(p.x, p.y, p.radius);
-      this.projectileGraphics.lineStyle(2, 0xffffff, 0.85);
-      this.projectileGraphics.strokeCircle(p.x, p.y, p.radius);
+
+      if (p.bulletType === 'bullet') {
+        // --- BLAZE / COLT: HIGH-VELOCITY TRACER LASER CAPSULE ---
+        const len = p.isSuper ? 26 : 18;
+        const w = p.isSuper ? 6 : 4;
+
+        // Motion tracer tail
+        this.projectileGraphics.lineStyle(w + 4, colorNum, 0.35);
+        this.projectileGraphics.lineBetween(
+          p.x - Math.cos(ang) * (len * 1.6),
+          p.y - Math.sin(ang) * (len * 1.6),
+          p.x,
+          p.y
+        );
+
+        // Outer glow
+        this.projectileGraphics.fillStyle(colorNum, 0.9);
+        this.projectileGraphics.fillCircle(p.x, p.y, w + 2);
+
+        // Core bright beam
+        this.projectileGraphics.lineStyle(w, 0xffffff, 1);
+        this.projectileGraphics.lineBetween(
+          p.x - Math.cos(ang) * len,
+          p.y - Math.sin(ang) * len,
+          p.x,
+          p.y
+        );
+        this.projectileGraphics.fillStyle(0xffffff, 1);
+        this.projectileGraphics.fillCircle(p.x, p.y, w);
+
+      } else if (p.bulletType === 'shotgun') {
+        // --- VIPER / SHELLY: FOCUSED BUCKSHOT PELLETS ---
+        const r = p.radius;
+        // Burning pellet glow
+        this.projectileGraphics.fillStyle(0xf97316, 0.45);
+        this.projectileGraphics.fillCircle(p.x - Math.cos(ang) * 8, p.y - Math.sin(ang) * 8, r * 0.8);
+
+        this.projectileGraphics.fillStyle(p.isSuper ? 0xfacc15 : 0xa855f7, 1);
+        this.projectileGraphics.fillCircle(p.x, p.y, r);
+        this.projectileGraphics.lineStyle(2, 0xffffff, 0.95);
+        this.projectileGraphics.strokeCircle(p.x, p.y, r);
+
+      } else if (p.bulletType === 'punch') {
+        // --- TITAN / EL PRIMO: KINETIC BOXING GLOVE SHOCKWAVE ---
+        const r = p.radius * 1.35;
+        // Shockwave aura
+        this.projectileGraphics.lineStyle(3, 0x38bdf8, 0.85);
+        this.projectileGraphics.strokeCircle(p.x, p.y, r + 5);
+
+        // Glove body
+        this.projectileGraphics.fillStyle(0x0284c7, 0.95);
+        this.projectileGraphics.fillCircle(p.x, p.y, r);
+
+        // Clenched knuckle highlight
+        const kx = p.x + Math.cos(ang) * (r * 0.45);
+        const ky = p.y + Math.sin(ang) * (r * 0.45);
+        this.projectileGraphics.fillStyle(0xffffff, 0.95);
+        this.projectileGraphics.fillCircle(kx, ky, r * 0.5);
+
+      } else if (p.bulletType === 'poison') {
+        // --- RAVEN / CROW: AERODYNAMIC EMERALD POISON KUNAI DAGGER ---
+        const tipX = p.x + Math.cos(ang) * 14;
+        const tipY = p.y + Math.sin(ang) * 14;
+        const backLeftX = p.x - Math.cos(ang) * 8 - Math.sin(ang) * 6;
+        const backLeftY = p.y - Math.sin(ang) * 8 + Math.cos(ang) * 6;
+        const backRightX = p.x - Math.cos(ang) * 8 + Math.sin(ang) * 6;
+        const backRightY = p.y - Math.sin(ang) * 8 - Math.cos(ang) * 6;
+        const handleX = p.x - Math.cos(ang) * 14;
+        const handleY = p.y - Math.sin(ang) * 14;
+
+        // Dagger blade
+        this.projectileGraphics.fillStyle(0x10b981, 1);
+        this.projectileGraphics.beginPath();
+        this.projectileGraphics.moveTo(tipX, tipY);
+        this.projectileGraphics.lineTo(backLeftX, backLeftY);
+        this.projectileGraphics.lineTo(backRightX, backRightY);
+        this.projectileGraphics.closePath();
+        this.projectileGraphics.fillPath();
+
+        // Dark toxic outline
+        this.projectileGraphics.lineStyle(2, 0xa855f7, 1);
+        this.projectileGraphics.strokePath();
+
+        // Handle
+        this.projectileGraphics.lineStyle(3, 0x1e293b, 1);
+        this.projectileGraphics.lineBetween(p.x, p.y, handleX, handleY);
+
+        // Venom drop
+        this.projectileGraphics.fillStyle(0x22c55e, 0.7);
+        this.projectileGraphics.fillCircle(handleX, handleY, 3);
+
+      } else if (p.bulletType === 'sonic') {
+        // --- HARMONY / POCO: PENETRATING SOUNDWAVE CRESCENT ---
+        const arcR = Math.max(20, p.radius * 2.3);
+
+        // Outer sound ripple
+        this.projectileGraphics.lineStyle(7, 0x10b981, 0.85);
+        this.projectileGraphics.beginPath();
+        this.projectileGraphics.arc(p.x, p.y, arcR, ang - 0.75, ang + 0.75);
+        this.projectileGraphics.strokePath();
+
+        // Inner glowing resonance wave
+        this.projectileGraphics.lineStyle(3, 0x6ee7b7, 0.95);
+        this.projectileGraphics.beginPath();
+        this.projectileGraphics.arc(p.x, p.y, arcR * 0.75, ang - 0.55, ang + 0.55);
+        this.projectileGraphics.strokePath();
+
+        // Acoustic resonance spark
+        this.projectileGraphics.fillStyle(0xffffff, 1);
+        this.projectileGraphics.fillCircle(p.x + Math.cos(ang) * arcR, p.y + Math.sin(ang) * arcR, 4);
+      }
     }
 
     // 6. Brawlers
@@ -1546,6 +2284,11 @@ export class PhaserBattleScene extends Phaser.Scene {
       if (brawler.doubleDamageTimer > 0) {
         this.brawlerGraphics.lineStyle(3, 0xef4444, alpha);
         this.brawlerGraphics.strokeCircle(drawX, drawY, brawler.radius + 10);
+      }
+      if (brawler.poisonTicksLeft > 0) {
+        // Toxic poison mist aura over brawler
+        this.brawlerGraphics.lineStyle(3, 0x10b981, 0.85);
+        this.brawlerGraphics.strokeCircle(drawX, drawY, brawler.radius + 8);
       }
 
       // Character body
@@ -1595,6 +2338,15 @@ export class PhaserBattleScene extends Phaser.Scene {
     // Hazard outer ring
     this.poisonGraphics.lineStyle(4, 0xef4444, 0.6);
     this.poisonGraphics.strokeCircle(cx, cy, pr + 12);
+
+    // 9. Comic Pop Damage Numbers
+    for (const dn of this.damageNumbers) {
+      const colNum = parseInt(dn.color.replace('#', ''), 16) || 0xef4444;
+      this.uiGraphics.fillStyle(colNum, dn.life);
+      this.uiGraphics.fillCircle(dn.x, dn.y, 4 * dn.scale);
+      this.uiGraphics.lineStyle(1.5, 0xffffff, dn.life);
+      this.uiGraphics.strokeCircle(dn.x, dn.y, 4 * dn.scale);
+    }
   }
 
   private renderOverheadBars(brawler: BrawlerEntity, x: number, y: number) {

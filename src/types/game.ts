@@ -273,6 +273,7 @@ export interface BrawlerEntity {
   // Status effects
   poisonTicksLeft: number;
   poisonDamage: number;
+  poisonDamageTimer?: number;
   poisonAttackerId: string | null;
   bandAidCooldown: number; // Shelly/Viper passive
   isLeaping: boolean;

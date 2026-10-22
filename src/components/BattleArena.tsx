@@ -34,6 +34,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
   const [playerAmmo, setPlayerAmmo] = useState(3);
   const [playerSuperCharge, setPlayerSuperCharge] = useState(0);
   const [powerCubes, setPowerCubes] = useState(0);
+  const [playerGadgetCharges, setPlayerGadgetCharges] = useState(3);
   const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([]);
   const [poisonPhase, setPoisonPhase] = useState(1);
   const [poisonTimer, setPoisonTimer] = useState(30);
@@ -143,12 +144,15 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
         onKillFeed: (entry) => {
           setKillFeed((feed) => [...feed.slice(-4), entry]);
         },
-        onPlayerHpChange: (hp, maxHp, ammo, superCharge, cubes) => {
+        onPlayerHpChange: (hp, maxHp, ammo, superCharge, cubes, gadgets) => {
           setPlayerHp(hp);
           setPlayerMaxHp(maxHp);
           setPlayerAmmo(ammo);
           setPlayerSuperCharge(superCharge);
           setPowerCubes(cubes);
+          if (typeof gadgets === 'number') {
+            setPlayerGadgetCharges(gadgets);
+          }
         },
         onPoisonPhaseChange: (phase, timeToNext) => {
           setPoisonPhase(phase);
@@ -205,6 +209,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({
           playerAmmo={playerAmmo}
           playerSuperCharge={playerSuperCharge}
           powerCubes={powerCubes}
+          gadgetCharges={playerGadgetCharges}
           killFeed={killFeed}
           poisonPhase={poisonPhase}
           poisonTimer={poisonTimer}
