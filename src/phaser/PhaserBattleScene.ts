@@ -105,9 +105,8 @@ export class PhaserBattleScene extends Phaser.Scene {
     
     // Pulisce l'evento per evitare duplicati nei match successivi
     this.game.events.off('REACT_COUNTDOWN_COMPLETE');
-  }
-}
-  public mapData!: MapData;
+    
+      public mapData!: MapData;
   public player!: BrawlerEntity;
   public brawlers: BrawlerEntity[] = [];
   public projectiles: Projectile[] = [];
@@ -117,6 +116,9 @@ export class PhaserBattleScene extends Phaser.Scene {
   public powerCubes: PowerCubeDrop[] = [];
   public powerUps: PowerUpItem[] = [];
   public obstacles: MapObstacle[] = [];
+
+  }
+}
 
   // Poison Storm Zone
   public poisonZone = {
