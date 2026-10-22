@@ -588,7 +588,7 @@ export class PhaserBattleScene extends Phaser.Scene {
     this.checkMatchStatus();
   }
   
-  private updatePlayerInput(dt: number) {
+    private updatePlayerInput(dt: number) {
     // 🟢 SE IL COUNTDOWN È ATTIVO, IL GIOCATORE LOCALE RIMANE IMMOBILE
     if (this.isCountdownActive) {
       if (this.player) {
@@ -597,14 +597,13 @@ export class PhaserBattleScene extends Phaser.Scene {
         this.player.vx = 0;
         this.player.vy = 0;
       }
-      this.moveVector.x = 0;
-      this.moveVector.y = 0;
-      this.aimVector.isAiming = false;
-      this.aimVector.isSuperAiming = false;
-      return; // Esce prima di leggere tastiera e mouse
+      // ❌ ABBIAMO RIMOSSO L'AZZERAMENTO DI: this.moveVector.x = 0;
+      // In questo modo i joystick di React non vengono distrutti in background!
+      return; // Esce semplicemente prima di calcolare la fisica del movimento
     }
 
     if (!this.player.isAlive || this.player.isLeaping) return;
+
 
 
     // Track real-time mouse position in world space as player & camera move
