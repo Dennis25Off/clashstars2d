@@ -47,9 +47,13 @@ export function loadPlayerProfile(): PlayerProfile {
         ...(parsed.controlsConfig?.customKeys || {}),
       },
     };
+    const isDesktop = typeof window !== 'undefined' && (!('ontouchstart' in window) || window.matchMedia?.('(pointer: fine)')?.matches);
+    const detectedPlatform = parsed.platform || (isDesktop ? 'pc' : 'mobile');
+
     return {
       ...INITIAL_PROFILE,
       ...parsed,
+      platform: detectedPlatform,
       brawlers: mergedBrawlers,
       stats: { ...INITIAL_PROFILE.stats, ...(parsed.stats || {}) },
       controlsConfig: mergedControls,

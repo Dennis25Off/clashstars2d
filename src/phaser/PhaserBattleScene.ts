@@ -99,6 +99,11 @@ export class PhaserBattleScene extends Phaser.Scene {
   public moveVector = { x: 0, y: 0 };
   public aimVector = { x: 0, y: 0, isAiming: false, isSuperAiming: false };
   public mousePos = { x: 0, y: 0 };
+  public mouseWorldPos = { x: 1200, y: 1200 };
+  public isMouseActive = false;
+  public isLeftMouseDown = false;
+  public isRightMouseDown = false;
+  private mouseFireCooldown = 0;
 
   // Multiplayer & Colyseus
   public roomId: string = 'CS-DEFAULT';
@@ -220,46 +225,69 @@ export class PhaserBattleScene extends Phaser.Scene {
       }) as { [key: string]: Phaser.Input.Keyboard.Key };
     }
 
-    // 6. Setup Pointer/Mouse input (Desktop only - touch events are dedicated to GameHUD joysticks)
+    // 6. Setup Pointer/Mouse input (Desktop & Mouse Support)
+    // Suppress context menu on canvas so right-click is dedicated to Super
+    if (this.game.canvas) {
+      this.game.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (pointer.wasTouch || (pointer.event as any)?.pointerType === 'touch') return;
+      this.isMouseActive = true;
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      this.mouseWorldPos.x = worldPoint.x;
+      this.mouseWorldPos.y = worldPoint.y;
       this.mousePos.x = worldPoint.x;
       this.mousePos.y = worldPoint.y;
 
-      if (this.aimVector.isAiming || pointer.isDown) {
-        const dx = worldPoint.x - this.player.x;
-        const dy = worldPoint.y - this.player.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist > 15) {
-          this.aimVector.x = dx / dist;
-          this.aimVector.y = dy / dist;
-        }
+      const dx = worldPoint.x - this.player.x;
+      const dy = worldPoint.y - this.player.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 5) {
+        this.aimVector.x = dx / dist;
+        this.aimVector.y = dy / dist;
+      }
+
+      // If not aiming via touch stick, rotate player smoothly towards mouse cursor
+      if (!this.aimVector.isAiming && !this.aimVector.isSuperAiming && dist > 10) {
+        this.player.rotation = Math.atan2(dy, dx);
       }
     });
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (pointer.wasTouch || (pointer.event as any)?.pointerType === 'touch') return;
+      this.isMouseActive = true;
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      this.mouseWorldPos.x = worldPoint.x;
+      this.mouseWorldPos.y = worldPoint.y;
+
       const dx = worldPoint.x - this.player.x;
       const dy = worldPoint.y - this.player.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > 10) {
-        this.aimVector.x = dx / dist;
-        this.aimVector.y = dy / dist;
-        this.aimVector.isAiming = true;
+      const angle = Math.atan2(dy, dx);
+      this.player.rotation = angle;
+
+      if (pointer.button === 0) {
+        // Left Click: Shoot immediately towards cursor
+        this.isLeftMouseDown = true;
+        this.firePlayerNormalAttack(angle);
+        const def = BRAWLERS[this.player.brawlerId];
+        this.mouseFireCooldown = def.id === 'titan' ? 0.35 : def.id === 'blaze' ? 0.42 : 0.28;
+      } else if (pointer.button === 2) {
+        // Right Click: Fire Super immediately towards cursor
+        this.isRightMouseDown = true;
+        if (this.player.superCharge >= 100) {
+          this.firePlayerSuper(angle);
+        }
       }
     });
 
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
       if (pointer.wasTouch || (pointer.event as any)?.pointerType === 'touch') return;
-      const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-      const dx = worldPoint.x - this.player.x;
-      const dy = worldPoint.y - this.player.y;
-      const angle = Math.atan2(dy, dx);
-
-      this.firePlayerNormalAttack(angle);
-      this.aimVector.isAiming = false;
+      if (pointer.button === 0) {
+        this.isLeftMouseDown = false;
+      } else if (pointer.button === 2) {
+        this.isRightMouseDown = false;
+      }
     });
 
     // 7. Setup Colyseus Room listeners
@@ -543,6 +571,31 @@ export class PhaserBattleScene extends Phaser.Scene {
   private updatePlayerInput(dt: number) {
     if (!this.player.isAlive || this.player.isLeaping) return;
 
+    // Track real-time mouse position in world space as player & camera move
+    if (this.isMouseActive && this.input.activePointer && !this.input.activePointer.wasTouch) {
+      const wp = this.cameras.main.getWorldPoint(this.input.activePointer.x, this.input.activePointer.y);
+      this.mouseWorldPos.x = wp.x;
+      this.mouseWorldPos.y = wp.y;
+    }
+
+    // Cooldown countdown for mouse auto-repeat fire
+    if (this.mouseFireCooldown > 0) {
+      this.mouseFireCooldown = Math.max(0, this.mouseFireCooldown - dt);
+    }
+
+    // Auto-fire while holding down Left Click on PC
+    if (this.isLeftMouseDown && this.isMouseActive && this.player.isAlive && !this.player.isLeaping) {
+      const activePlayerBursts = this.activeBursts.filter((b) => b.attackerId === this.player.id).length;
+      if (this.player.ammo >= 1 && this.mouseFireCooldown <= 0 && activePlayerBursts === 0) {
+        const dx = this.mouseWorldPos.x - this.player.x;
+        const dy = this.mouseWorldPos.y - this.player.y;
+        const angle = Math.atan2(dy, dx);
+        this.firePlayerNormalAttack(angle);
+        const def = BRAWLERS[this.player.brawlerId];
+        this.mouseFireCooldown = def.id === 'titan' ? 0.42 : def.id === 'blaze' ? 0.45 : 0.32;
+      }
+    }
+
     let moveX = this.moveVector.x;
     let moveY = this.moveVector.y;
 
@@ -554,13 +607,19 @@ export class PhaserBattleScene extends Phaser.Scene {
 
     // Hotkeys
     if (Phaser.Input.Keyboard.JustDown(this.keys.space)) {
-      this.firePlayerSuper();
+      const angle = this.isMouseActive
+        ? Math.atan2(this.mouseWorldPos.y - this.player.y, this.mouseWorldPos.x - this.player.x)
+        : undefined;
+      this.firePlayerSuper(angle);
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.e) || Phaser.Input.Keyboard.JustDown(this.keys.f)) {
       this.usePlayerGadget();
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.q)) {
-      this.firePlayerNormalAttack();
+      const angle = this.isMouseActive
+        ? Math.atan2(this.mouseWorldPos.y - this.player.y, this.mouseWorldPos.x - this.player.x)
+        : undefined;
+      this.firePlayerNormalAttack(angle);
     }
 
     const def = BRAWLERS[this.player.brawlerId];
@@ -578,7 +637,8 @@ export class PhaserBattleScene extends Phaser.Scene {
       this.player.isMoving = true;
       this.player.walkCycle += dt * 14;
 
-      if (!this.aimVector.isAiming) {
+      // Only face movement direction if neither mouse nor touch aim stick are active
+      if (!this.isMouseActive && !this.aimVector.isAiming && !this.aimVector.isSuperAiming) {
         this.player.rotation = Math.atan2(normY, normX);
       }
     } else {
@@ -586,8 +646,15 @@ export class PhaserBattleScene extends Phaser.Scene {
       this.player.walkCycle = 0;
     }
 
-    if (this.aimVector.isAiming) {
+    // Direction priority: touch aim joystick > mouse aim cursor
+    if (this.aimVector.isAiming || this.aimVector.isSuperAiming) {
       this.player.rotation = Math.atan2(this.aimVector.y, this.aimVector.x);
+    } else if (this.isMouseActive) {
+      const dx = this.mouseWorldPos.x - this.player.x;
+      const dy = this.mouseWorldPos.y - this.player.y;
+      if (Math.hypot(dx, dy) > 8) {
+        this.player.rotation = Math.atan2(dy, dx);
+      }
     }
   }
 
@@ -2311,18 +2378,151 @@ export class PhaserBattleScene extends Phaser.Scene {
       this.renderOverheadBars(brawler, drawX, drawY - brawler.radius - 14);
     }
 
-    // 7. Aim Trajectory
+    // 7. Aim Trajectory & Weapon Reticle (PC Mouse & Touch Aim)
     this.aimGraphics.clear();
-    if (this.player.isAlive && (this.aimVector.isAiming || this.aimVector.isSuperAiming)) {
-      const def = BRAWLERS[this.player.brawlerId];
-      const range = this.aimVector.isSuperAiming ? def.superRange : def.attackRange;
-      const angle = Math.atan2(this.aimVector.y, this.aimVector.x);
-      const endX = this.player.x + Math.cos(angle) * range;
-      const endY = this.player.y + Math.sin(angle) * range;
+    const isSuperAiming = this.aimVector.isSuperAiming || (this.isRightMouseDown && this.player.superCharge >= 100);
+    const isNormalAiming = this.aimVector.isAiming || this.isMouseActive;
 
-      this.aimGraphics.lineStyle(3, this.aimVector.isSuperAiming ? 0xfacc15 : 0x38bdf8, 0.85);
-      this.aimGraphics.lineBetween(this.player.x, this.player.y, endX, endY);
-      this.aimGraphics.strokeCircle(endX, endY, 14);
+    if (this.player.isAlive && (isNormalAiming || isSuperAiming)) {
+      const def = BRAWLERS[this.player.brawlerId];
+      const range = isSuperAiming ? def.superRange : def.attackRange;
+
+      let angle = this.player.rotation;
+      if (this.aimVector.isAiming || this.aimVector.isSuperAiming) {
+        angle = Math.atan2(this.aimVector.y, this.aimVector.x);
+      } else if (this.isMouseActive) {
+        angle = Math.atan2(this.mouseWorldPos.y - this.player.y, this.mouseWorldPos.x - this.player.x);
+      }
+
+      const pX = this.player.x;
+      const pY = this.player.y;
+      const endX = pX + Math.cos(angle) * range;
+      const endY = pY + Math.sin(angle) * range;
+
+      const glowAlpha = isSuperAiming ? 0.9 : 0.75;
+
+      if (isSuperAiming) {
+        // SUPER AIMING OVERLAY
+        if (this.player.brawlerId === 'titan') {
+          // El Primo Super Leap Target Circle
+          const cursorDist = Math.hypot(this.mouseWorldPos.x - pX, this.mouseWorldPos.y - pY);
+          const leapDist = Math.min(range, cursorDist);
+          const leapX = pX + Math.cos(angle) * leapDist;
+          const leapY = pY + Math.sin(angle) * leapDist;
+
+          // Leap path line
+          this.aimGraphics.lineStyle(3, 0xfacc15, 0.6);
+          this.aimGraphics.lineBetween(pX, pY, leapX, leapY);
+
+          // Impact crater circle
+          this.aimGraphics.fillStyle(0xfacc15, 0.2);
+          this.aimGraphics.fillCircle(leapX, leapY, 110);
+          this.aimGraphics.lineStyle(3.5, 0xfacc15, 0.9);
+          this.aimGraphics.strokeCircle(leapX, leapY, 110);
+        } else if (this.player.brawlerId === 'raven') {
+          // Crow Super 360 Radial Storm
+          this.aimGraphics.lineStyle(2, 0xfacc15, 0.4);
+          this.aimGraphics.strokeCircle(pX, pY, 200);
+          this.aimGraphics.lineStyle(3.5, 0xfacc15, 0.85);
+          this.aimGraphics.lineBetween(pX, pY, endX, endY);
+          this.aimGraphics.strokeCircle(endX, endY, 16);
+        } else {
+          // Super beam / blast line
+          this.aimGraphics.lineStyle(6, 0xfacc15, 0.35);
+          this.aimGraphics.lineBetween(pX, pY, endX, endY);
+          this.aimGraphics.lineStyle(3, 0xffffff, glowAlpha);
+          this.aimGraphics.lineBetween(pX, pY, endX, endY);
+          this.aimGraphics.strokeCircle(endX, endY, 16);
+        }
+      } else {
+        // NORMAL ATTACK RETICLE ACCORDING TO BRAWLER TYPE
+        if (def.id === 'blaze') {
+          // Blaze / Colt: Sharp Long-Range Tracer Line
+          this.aimGraphics.lineStyle(4, 0xef4444, 0.3);
+          this.aimGraphics.lineBetween(pX, pY, endX, endY);
+          this.aimGraphics.lineStyle(2.5, 0x38bdf8, 0.85);
+          this.aimGraphics.lineBetween(pX, pY, endX, endY);
+
+          // End Crosshair with targeting ticks
+          this.aimGraphics.lineStyle(2, 0xffffff, 0.95);
+          this.aimGraphics.strokeCircle(endX, endY, 12);
+          this.aimGraphics.lineBetween(endX - 16, endY, endX - 6, endY);
+          this.aimGraphics.lineBetween(endX + 6, endY, endX + 16, endY);
+          this.aimGraphics.lineBetween(endX, endY - 16, endX, endY - 6);
+          this.aimGraphics.lineBetween(endX, endY + 6, endX, endY + 16);
+
+        } else if (def.id === 'viper') {
+          // Viper / Shelly: Shotgun Spread Cone (0.38 rad spread)
+          const halfSpread = 0.19;
+          const leftAngle = angle - halfSpread;
+          const rightAngle = angle + halfSpread;
+          const leftX = pX + Math.cos(leftAngle) * range;
+          const leftY = pY + Math.sin(leftAngle) * range;
+          const rightX = pX + Math.cos(rightAngle) * range;
+          const rightY = pY + Math.sin(rightAngle) * range;
+
+          // Cone boundary rays
+          this.aimGraphics.lineStyle(2, 0xa855f7, 0.85);
+          this.aimGraphics.lineBetween(pX, pY, leftX, leftY);
+          this.aimGraphics.lineBetween(pX, pY, rightX, rightY);
+          // Center ray
+          this.aimGraphics.lineStyle(1.5, 0xffffff, 0.6);
+          this.aimGraphics.lineBetween(pX, pY, endX, endY);
+          // Curved end spread arc
+          this.aimGraphics.lineStyle(2.5, 0xa855f7, 0.85);
+          this.aimGraphics.lineBetween(leftX, leftY, endX, endY);
+          this.aimGraphics.lineBetween(endX, endY, rightX, rightY);
+
+        } else if (def.id === 'titan') {
+          // Titan / El Primo: Short Melee Punch Arc
+          this.aimGraphics.lineStyle(4, 0x0284c7, 0.85);
+          const halfArc = 0.55;
+          const leftX = pX + Math.cos(angle - halfArc) * range;
+          const leftY = pY + Math.sin(angle - halfArc) * range;
+          const rightX = pX + Math.cos(angle + halfArc) * range;
+          const rightY = pY + Math.sin(angle + halfArc) * range;
+          this.aimGraphics.lineBetween(pX, pY, leftX, leftY);
+          this.aimGraphics.lineBetween(pX, pY, rightX, rightY);
+          this.aimGraphics.lineBetween(leftX, leftY, endX, endY);
+          this.aimGraphics.lineBetween(endX, endY, rightX, rightY);
+          this.aimGraphics.strokeCircle(endX, endY, 14);
+
+        } else if (def.id === 'raven') {
+          // Raven / Crow: 3 Toxic Dagger Rays
+          const dAngles = [angle - 0.22, angle, angle + 0.22];
+          for (const dAng of dAngles) {
+            const dx = pX + Math.cos(dAng) * range;
+            const dy = pY + Math.sin(dAng) * range;
+            this.aimGraphics.lineStyle(2, 0x10b981, 0.85);
+            this.aimGraphics.lineBetween(pX, pY, dx, dy);
+            this.aimGraphics.strokeCircle(dx, dy, 5);
+          }
+
+        } else {
+          // Harmony / Poco: Acoustic Wide Fan Arc
+          const halfFan = 0.34;
+          const leftX = pX + Math.cos(angle - halfFan) * range;
+          const leftY = pY + Math.sin(angle - halfFan) * range;
+          const rightX = pX + Math.cos(angle + halfFan) * range;
+          const rightY = pY + Math.sin(angle + halfFan) * range;
+
+          this.aimGraphics.lineStyle(2, 0x38bdf8, 0.85);
+          this.aimGraphics.lineBetween(pX, pY, leftX, leftY);
+          this.aimGraphics.lineBetween(pX, pY, rightX, rightY);
+          this.aimGraphics.lineBetween(leftX, leftY, endX, endY);
+          this.aimGraphics.lineBetween(endX, endY, rightX, rightY);
+        }
+
+        // Distinct Mouse Crosshair Reticle under cursor on PC
+        if (this.isMouseActive) {
+          const mX = this.mouseWorldPos.x;
+          const mY = this.mouseWorldPos.y;
+          this.aimGraphics.lineStyle(1.5, 0xffffff, 0.8);
+          this.aimGraphics.strokeCircle(mX, mY, 8);
+          this.aimGraphics.fillStyle(0x38bdf8, 0.9);
+          this.aimGraphics.fillCircle(mX, mY, 2.5);
+        }
+      }
     }
 
     // 8. Poison Storm Zone

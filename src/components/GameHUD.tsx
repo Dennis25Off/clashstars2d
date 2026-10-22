@@ -263,40 +263,15 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       engine.moveVector = { x: dx, y: dy };
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = engine.canvas?.getBoundingClientRect() || {
-        left: 0,
-        top: 0,
-        width: window.innerWidth,
-        height: window.innerHeight,
-      };
-      const screenCenterX = rect.width / 2;
-      const screenCenterY = rect.height / 2;
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const angle = Math.atan2(mouseY - screenCenterY, mouseX - screenCenterX);
-      if (!engine.aimVector.isAiming && !engine.aimVector.isSuperAiming) {
-        engine.player.rotation = angle;
-      }
+    const handleMouseMove = () => {
+      // Phaser's canvas pointer listeners track world-space mouse aiming and rotation accurately
     };
 
     const handleMouseDown = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest('button')) return;
-      const rect = engine.canvas?.getBoundingClientRect() || {
-        left: 0,
-        top: 0,
-        width: window.innerWidth,
-        height: window.innerHeight,
-      };
       if (e.button === 0) {
         setActiveKeys((p) => ({ ...p, leftClick: true }));
-        const angle = Math.atan2(e.clientY - rect.top - rect.height / 2, e.clientX - rect.left - rect.width / 2);
-        engine.firePlayerNormalAttack(angle);
       } else if (e.button === 2) {
         setActiveKeys((p) => ({ ...p, rightClick: true }));
-        const angle = Math.atan2(e.clientY - rect.top - rect.height / 2, e.clientX - rect.left - rect.width / 2);
-        engine.firePlayerSuper(angle);
       }
     };
 
@@ -988,6 +963,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               >
                 WASD: Muovi
               </span>
+              <span className="px-1.5 py-0.5 rounded font-black text-cyan-300 bg-cyan-950/60 border border-cyan-600/40">
+                Mouse: Mira
+              </span>
               <span
                 onClick={() => engine.firePlayerNormalAttack()}
                 className={`cursor-pointer px-1.5 py-0.5 rounded font-black transition-all active:scale-95 ${
@@ -996,19 +974,19 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     : 'text-red-300 bg-red-950/60 border border-red-600/40 hover:bg-red-900/60'
                 }`}
               >
-                Click SX / F: Fuoco
+                Click SX / F: Spara
               </span>
               <span
                 onClick={() => isSuperReady && engine.firePlayerSuper()}
                 className={`cursor-pointer px-1.5 py-0.5 rounded font-black transition-all active:scale-95 ${
-                  activeKeys.space || activeKeys.r
+                  activeKeys.space || activeKeys.r || activeKeys.rightClick
                     ? 'bg-yellow-300 text-slate-950 scale-105 shadow-md shadow-yellow-400/50'
                     : isSuperReady
                     ? 'text-yellow-300 bg-amber-950/80 border border-yellow-400 animate-pulse'
                     : 'text-slate-400 bg-slate-900/60 border border-slate-700'
                 }`}
               >
-                Spazio / R: Super
+                Click DX / Spazio: Super
               </span>
               <button
                 onClick={() => {
@@ -1060,7 +1038,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     : 'bg-slate-900 border-yellow-400 text-yellow-300'
                 }`}
               >
-                [SPAZIO / R]
+                [CLICK DX / SPAZIO]
               </span>
             )}
           </div>
@@ -1070,7 +1048,18 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <div
               ref={rightTouchRef}
               onTouchStart={handleRightTouchStart}
-              onClick={() => engine.firePlayerNormalAttack()}
+              onClick={(e) => {
+                // If clicked with mouse, pass world-space angle accurately towards clicked position
+                const rect = engine.canvas?.getBoundingClientRect();
+                if (rect && (engine as any).scene) {
+                  const sc = (engine as any).scene;
+                  const wp = sc.cameras.main.getWorldPoint(e.clientX - rect.left, e.clientY - rect.top);
+                  const angle = Math.atan2(wp.y - engine.player.y, wp.x - engine.player.x);
+                  engine.firePlayerNormalAttack(angle);
+                  return;
+                }
+                engine.firePlayerNormalAttack();
+              }}
               className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-slate-900/60 border-2 border-red-900/60 backdrop-blur-xs touch-none flex items-center justify-center shrink-0 cursor-crosshair shadow-lg"
             >
               {/* Visible Attack Key Badge on top */}
