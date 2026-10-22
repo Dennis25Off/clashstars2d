@@ -46,7 +46,7 @@ export const MatchStartOverlay: React.FC<MatchStartOverlayProps> = ({
         <p className="text-gray-400 text-sm mt-1 uppercase font-bold tracking-wider">Preparati alla battaglia</p>
       </div>
 
-      <div className="flex items-center justify-around w-full my-auto max-w-5xl mx-auto gap-4">
+      <div className="flex items-center justify-around w-full my-auto max-w-6xl mx-auto gap-4">
         {/* TU */}
         <div className="flex flex-col items-center bg-gradient-to-b from-blue-600/40 to-blue-900/40 border-4 border-blue-500 rounded-2xl p-6 w-52 shadow-2xl">
           <span className="bg-blue-500 text-xs font-black px-4 py-1 rounded-full uppercase mb-4 tracking-wider">Tu</span>
@@ -67,26 +67,26 @@ export const MatchStartOverlay: React.FC<MatchStartOverlayProps> = ({
           </div>
         </div>
 
-        {/* NEMICI */}
-        <div className="flex gap-4">
-          {enemies.length === 0 ? (
-            <div className="text-gray-500 italic font-bold">In attesa degli avversari...</div>
-          ) : (
-            enemies.map((enemy, index) => (
+        {/* NEMICI IN 2 RIGHE E PIÙ PICCOLI */}
+        {enemies.length === 0 ? (
+          <div className="text-gray-500 italic font-bold">In attesa degli avversari...</div>
+        ) : (
+          <div className="grid grid-rows-2 grid-flow-col gap-3">
+            {enemies.map((enemy, index) => (
               <div 
                 key={index} 
-                className="flex flex-col items-center bg-gradient-to-b from-red-600/30 to-red-900/30 border-4 border-red-500 rounded-2xl p-5 w-40 shadow-2xl"
+                className="flex flex-col items-center bg-gradient-to-b from-red-600/30 to-red-900/30 border-2 border-red-500 rounded-xl p-3 w-32 shadow-xl"
               >
-                <span className="bg-red-500 text-[10px] font-black px-3 py-0.5 rounded-full uppercase mb-3 tracking-wider">Nemico</span>
-                <div className="w-16 h-16 bg-red-950 border-4 border-red-400 rounded-full flex items-center justify-center text-2xl">
+                <span className="bg-red-500 text-[9px] font-black px-2 py-0.5 rounded-full uppercase mb-2 tracking-wider">Nemico</span>
+                <div className="w-12 h-12 bg-red-950 border-2 border-red-400 rounded-full flex items-center justify-center text-xl">
                   👤
                 </div>
-                <h3 className="text-sm font-black mt-3 uppercase truncate max-w-full text-red-200">{enemy.name || 'Player'}</h3>
-                <span className="text-xs text-yellow-500 font-mono font-bold mt-1">🏆 {enemy.trophies || 0}</span>
+                <h3 className="text-xs font-black mt-2 uppercase truncate max-w-full text-red-200 text-center">{enemy.name || 'Player'}</h3>
+                <span className="text-[11px] text-yellow-500 font-mono font-bold mt-0.5">🏆 {enemy.trophies || 0}</span>
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="text-center mb-4 text-xs font-bold text-gray-500 tracking-wide uppercase animate-pulse">
