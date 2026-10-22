@@ -42,6 +42,10 @@ export function loadPlayerProfile(): PlayerProfile {
     const mergedControls: ControlsConfig = {
       ...DEFAULT_CONTROLS_CONFIG,
       ...(parsed.controlsConfig || {}),
+      touchAimSensitivity:
+        typeof parsed.controlsConfig?.touchAimSensitivity === 'number'
+          ? parsed.controlsConfig.touchAimSensitivity
+          : DEFAULT_CONTROLS_CONFIG.touchAimSensitivity,
       customKeys: {
         ...DEFAULT_CONTROLS_CONFIG.customKeys,
         ...(parsed.controlsConfig?.customKeys || {}),

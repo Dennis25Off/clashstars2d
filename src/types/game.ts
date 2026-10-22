@@ -97,6 +97,7 @@ export interface ControlsConfig {
   autoAimOnTap: boolean;
   dpadSize: 'normal' | 'large';
   attackBtnSize: 'normal' | 'large';
+  touchAimSensitivity: number; // 0.5 to 2.0 (default 1.0)
   customKeys: {
     moveUp: string;
     moveDown: string;
@@ -116,6 +117,7 @@ export const DEFAULT_CONTROLS_CONFIG: ControlsConfig = {
   autoAimOnTap: true,
   dpadSize: 'normal',
   attackBtnSize: 'normal',
+  touchAimSensitivity: 1.0,
   customKeys: {
     moveUp: 'w',
     moveDown: 's',

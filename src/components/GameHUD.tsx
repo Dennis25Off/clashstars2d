@@ -68,14 +68,24 @@ export const GameHUD: React.FC<GameHUDProps> = ({
     ...(externalConfig || {}),
   }));
 
+  const controlsRef = useRef<ControlsConfig>(controls);
+  useEffect(() => {
+    controlsRef.current = controls;
+  }, [controls]);
+
   // Sync external changes
   useEffect(() => {
     if (externalConfig) {
-      setControls((prev) => ({ ...prev, ...externalConfig }));
+      setControls((prev) => {
+        const next = { ...prev, ...externalConfig };
+        controlsRef.current = next;
+        return next;
+      });
     }
   }, [externalConfig]);
 
   const updateControls = (newCfg: ControlsConfig) => {
+    controlsRef.current = newCfg;
     setControls(newCfg);
     if (onUpdateControlsConfig) {
       onUpdateControlsConfig(newCfg);
@@ -180,6 +190,34 @@ export const GameHUD: React.FC<GameHUDProps> = ({
     active: false,
     startX: 0,
     startY: 0,
+    currX: 0,
+    currY: 0,
+  });
+
+  // Super touch drag stick ref & visual state
+  const superTouchRef = useRef<HTMLButtonElement>(null);
+  const superTouchIdRef = useRef<number | null>(null);
+  const superTouchStartTime = useRef<number>(0);
+  const superStickRef = useRef<{
+    active: boolean;
+    centerX: number;
+    centerY: number;
+    currX: number;
+    currY: number;
+  }>({
+    active: false,
+    centerX: 0,
+    centerY: 0,
+    currX: 0,
+    currY: 0,
+  });
+
+  const [superStick, setSuperStick] = useState<{
+    active: boolean;
+    currX: number;
+    currY: number;
+  }>({
+    active: false,
     currX: 0,
     currY: 0,
   });
@@ -359,21 +397,69 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
             const dx = touchX - centerX;
             const dy = touchY - centerY;
-            const dist = Math.hypot(dx, dy);
-            const maxRadius = 55;
-            const normDist = Math.min(dist, maxRadius);
-            const angle = Math.atan2(dy, dx);
+            const rawDist = Math.hypot(dx, dy);
 
-            const clampedX = centerX + Math.cos(angle) * normDist;
-            const clampedY = centerY + Math.sin(angle) * normDist;
+            const sensitivity = controlsRef.current.touchAimSensitivity ?? 1.0;
+            const scaledDx = dx * sensitivity;
+            const scaledDy = dy * sensitivity;
+            const scaledDist = Math.hypot(scaledDx, scaledDy);
+            const maxRadius = 55;
+            const normDist = Math.min(scaledDist, maxRadius);
+            const angle = Math.atan2(scaledDy, scaledDx);
+
+            const clampedX = centerX + (scaledDist > 0 ? (scaledDx / scaledDist) * normDist : 0);
+            const clampedY = centerY + (scaledDist > 0 ? (scaledDy / scaledDist) * normDist : 0);
 
             rightStickRef.current.currX = clampedX;
             rightStickRef.current.currY = clampedY;
             setRightStick((prev) => ({ ...prev, currX: clampedX, currY: clampedY }));
 
-            if (dist > 10) {
+            const deadzone = Math.max(6, Math.round(14 / Math.max(0.4, sensitivity)));
+            if (rawDist > deadzone) {
               engine.aimVector.x = Math.cos(angle);
               engine.aimVector.y = Math.sin(angle);
+              engine.aimVector.isAiming = true;
+            }
+            break;
+          }
+        }
+      }
+
+      // 3. Process Super Stick if its touch identifier is active
+      if (superTouchIdRef.current !== null && superTouchRef.current && superStickRef.current.active) {
+        for (let i = 0; i < e.touches.length; i++) {
+          const t = e.touches[i];
+          if (t.identifier === superTouchIdRef.current) {
+            const rect = superTouchRef.current.getBoundingClientRect();
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const touchX = t.clientX - rect.left;
+            const touchY = t.clientY - rect.top;
+
+            const dx = touchX - centerX;
+            const dy = touchY - centerY;
+            const rawDist = Math.hypot(dx, dy);
+
+            const sensitivity = controlsRef.current.touchAimSensitivity ?? 1.0;
+            const scaledDx = dx * sensitivity;
+            const scaledDy = dy * sensitivity;
+            const scaledDist = Math.hypot(scaledDx, scaledDy);
+            const maxRadius = 45;
+            const normDist = Math.min(scaledDist, maxRadius);
+            const angle = Math.atan2(scaledDy, scaledDx);
+
+            const clampedX = centerX + (scaledDist > 0 ? (scaledDx / scaledDist) * normDist : 0);
+            const clampedY = centerY + (scaledDist > 0 ? (scaledDy / scaledDist) * normDist : 0);
+
+            superStickRef.current.currX = clampedX;
+            superStickRef.current.currY = clampedY;
+            setSuperStick({ active: true, currX: clampedX, currY: clampedY });
+
+            const deadzone = Math.max(6, Math.round(12 / Math.max(0.4, sensitivity)));
+            if (rawDist > deadzone) {
+              engine.aimVector.x = Math.cos(angle);
+              engine.aimVector.y = Math.sin(angle);
+              engine.aimVector.isSuperAiming = true;
             }
             break;
           }
@@ -410,7 +496,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             const dy = rightStickRef.current.currY - centerY;
             const dist = Math.hypot(dx, dy);
 
-            if (dist < 18 || duration < 190) {
+            const sensitivity = controlsRef.current.touchAimSensitivity ?? 1.0;
+            const deadzone = Math.max(8, Math.round(18 / Math.max(0.4, sensitivity)));
+
+            if (dist < deadzone || duration < 190) {
               // Quick tap: Auto-aim!
               engine.firePlayerNormalAttack();
             } else {
@@ -421,6 +510,39 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
             setRightStick({ active: false, startX: 0, startY: 0, currX: 0, currY: 0 });
             engine.aimVector.isAiming = false;
+            break;
+          }
+        }
+      }
+
+      // Check if super touch ended
+      if (superTouchIdRef.current !== null) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === superTouchIdRef.current) {
+            superTouchIdRef.current = null;
+            superStickRef.current.active = false;
+            const duration = Date.now() - superTouchStartTime.current;
+            const rect = superTouchRef.current?.getBoundingClientRect();
+            const centerX = rect ? rect.width / 2 : 0;
+            const centerY = rect ? rect.height / 2 : 0;
+            const dx = superStickRef.current.currX - centerX;
+            const dy = superStickRef.current.currY - centerY;
+            const dist = Math.hypot(dx, dy);
+
+            const sensitivity = controlsRef.current.touchAimSensitivity ?? 1.0;
+            const deadzone = Math.max(8, Math.round(16 / Math.max(0.4, sensitivity)));
+
+            if (dist < deadzone || duration < 190) {
+              // Quick tap: Auto-aim Super!
+              engine.firePlayerSuper();
+            } else {
+              // Drag release: Fire aimed Super in direction!
+              const angle = Math.atan2(dy, dx);
+              engine.firePlayerSuper(angle);
+            }
+
+            setSuperStick({ active: false, currX: 0, currY: 0 });
+            engine.aimVector.isSuperAiming = false;
             break;
           }
         }
@@ -488,17 +610,63 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
     const dx = touchX - centerX;
     const dy = touchY - centerY;
-    const dist = Math.hypot(dx, dy);
+    const rawDist = Math.hypot(dx, dy);
+
+    const sensitivity = controlsRef.current.touchAimSensitivity ?? 1.0;
+    const scaledDx = dx * sensitivity;
+    const scaledDy = dy * sensitivity;
+    const scaledDist = Math.hypot(scaledDx, scaledDy);
     const maxRadius = 55;
-    const normDist = Math.min(dist, maxRadius);
-    const angle = dist > 0 ? Math.atan2(dy, dx) : 0;
-    const currX = centerX + Math.cos(angle) * normDist;
-    const currY = centerY + Math.sin(angle) * normDist;
+    const normDist = Math.min(scaledDist, maxRadius);
+    const angle = scaledDist > 0 ? Math.atan2(scaledDy, scaledDx) : 0;
+    const currX = centerX + (scaledDist > 0 ? (scaledDx / scaledDist) * normDist : 0);
+    const currY = centerY + (scaledDist > 0 ? (scaledDy / scaledDist) * normDist : 0);
 
     rightStickRef.current = { active: true, centerX, centerY, currX, currY };
     setRightStick({ active: true, startX: centerX, startY: centerY, currX, currY });
     engine.aimVector.isAiming = true;
-    if (dist > 10) {
+    const deadzone = Math.max(6, Math.round(14 / Math.max(0.4, sensitivity)));
+    if (rawDist > deadzone) {
+      engine.aimVector.x = Math.cos(angle);
+      engine.aimVector.y = Math.sin(angle);
+    }
+  };
+
+  const handleSuperTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isSuperReady) return;
+    if (superTouchIdRef.current !== null) return;
+    const touch = e.changedTouches[0];
+    superTouchIdRef.current = touch.identifier;
+    superTouchStartTime.current = Date.now();
+
+    const rect = superTouchRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const touchX = touch.clientX - rect.left;
+    const touchY = touch.clientY - rect.top;
+
+    const dx = touchX - centerX;
+    const dy = touchY - centerY;
+    const rawDist = Math.hypot(dx, dy);
+
+    const sensitivity = controlsRef.current.touchAimSensitivity ?? 1.0;
+    const scaledDx = dx * sensitivity;
+    const scaledDy = dy * sensitivity;
+    const scaledDist = Math.hypot(scaledDx, scaledDy);
+    const maxRadius = 45;
+    const normDist = Math.min(scaledDist, maxRadius);
+    const angle = scaledDist > 0 ? Math.atan2(scaledDy, scaledDx) : 0;
+    const currX = centerX + (scaledDist > 0 ? (scaledDx / scaledDist) * normDist : 0);
+    const currY = centerY + (scaledDist > 0 ? (scaledDy / scaledDist) * normDist : 0);
+
+    superStickRef.current = { active: true, centerX, centerY, currX, currY };
+    setSuperStick({ active: true, currX, currY });
+    engine.aimVector.isSuperAiming = true;
+    const deadzone = Math.max(6, Math.round(12 / Math.max(0.4, sensitivity)));
+    if (rawDist > deadzone) {
       engine.aimVector.x = Math.cos(angle);
       engine.aimVector.y = Math.sin(angle);
     }
@@ -1003,20 +1171,18 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
         {/* RIGHT CONTROLS: Super Button & Visible Red Attack Button with Touch Aim (Multi-Touch Enabled) */}
         <div className="flex items-center gap-2 sm:gap-4 pointer-events-auto shrink-0">
-          {/* Super Button (Touch-Safe) */}
+          {/* Super Button (Touch-Safe with Sensitivity-Scaled Drag Aim) */}
           <div className="relative">
             <button
-              onTouchStart={(e) => {
-                e.stopPropagation();
-                if (isSuperReady) engine.firePlayerSuper();
-              }}
+              ref={superTouchRef}
+              onTouchStart={handleSuperTouchStart}
               onClick={(e) => {
                 e.stopPropagation();
                 if (isSuperReady) engine.firePlayerSuper();
               }}
               disabled={!isSuperReady}
-              className={`w-14 h-14 sm:w-18 sm:h-18 rounded-full flex flex-col items-center justify-center border-3 sm:border-4 shadow-xl transition active:scale-90 ${
-                activeKeys.space || activeKeys.r || activeKeys.rightClick
+              className={`relative w-14 h-14 sm:w-18 sm:h-18 rounded-full flex flex-col items-center justify-center border-3 sm:border-4 shadow-xl transition active:scale-90 touch-none ${
+                activeKeys.space || activeKeys.r || activeKeys.rightClick || superStick.active
                   ? 'bg-yellow-200 border-white text-slate-950 scale-110 shadow-yellow-400/80'
                   : isSuperReady
                   ? 'bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-300 border-yellow-200 text-slate-950 animate-bounce shadow-yellow-500/50'
@@ -1027,13 +1193,21 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               <span className="text-[8px] sm:text-[10px] font-black">
                 {isSuperReady ? 'SUPER!' : `${Math.floor(playerSuperCharge)}%`}
               </span>
+
+              {/* Active Thumb Knob during Super drag aiming */}
+              {superStick.active && (
+                <div
+                  className="absolute w-12 h-12 rounded-full bg-yellow-300 border-2 border-white shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-1/2 animate-pulse"
+                  style={{ left: `${superStick.currX}px`, top: `${superStick.currY}px` }}
+                />
+              )}
             </button>
 
             {/* Visible Key Badge for Super */}
             {controls.showVisibleKeys && (
               <span
                 className={`absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-md font-black text-[8px] sm:text-[9px] border shadow transition-all pointer-events-none whitespace-nowrap ${
-                  activeKeys.space || activeKeys.r || activeKeys.rightClick
+                  activeKeys.space || activeKeys.r || activeKeys.rightClick || superStick.active
                     ? 'bg-yellow-300 border-white text-slate-950 scale-110'
                     : 'bg-slate-900 border-yellow-400 text-yellow-300'
                 }`}

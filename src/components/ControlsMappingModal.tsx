@@ -12,6 +12,8 @@ import {
   Flame,
   Gamepad2,
   Sparkles,
+  SlidersHorizontal,
+  Target,
 } from 'lucide-react';
 import { ControlsConfig, DEFAULT_CONTROLS_CONFIG, MobileMoveMode, PCLayoutMode } from '../types/game';
 import { sound } from '../utils/audio';
@@ -36,6 +38,52 @@ export const ControlsMappingModal: React.FC<ControlsMappingModalProps> = ({
   // Live keypress feedback for the interactive preview
   const [activePressedKeys, setActivePressedKeys] = useState<Record<string, boolean>>({});
   const [lastActionTriggered, setLastActionTriggered] = useState<string>('');
+
+  // Interactive Touch Aim Sensitivity Live Tester state
+  const [testAimStick, setTestAimStick] = useState<{
+    active: boolean;
+    dx: number;
+    dy: number;
+    angle: number;
+    power: number;
+  }>({
+    active: false,
+    dx: 0,
+    dy: 0,
+    angle: 0,
+    power: 0,
+  });
+
+  const handleTestAimPointer = (clientX: number, clientY: number, target: HTMLElement) => {
+    const rect = target.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const rawDx = clientX - rect.left - centerX;
+    const rawDy = clientY - rect.top - centerY;
+
+    const sens = config.touchAimSensitivity ?? 1.0;
+    const scaledDx = rawDx * sens;
+    const scaledDy = rawDy * sens;
+    const scaledDist = Math.hypot(scaledDx, scaledDy);
+    const maxRadius = 45;
+    const normDist = Math.min(scaledDist, maxRadius);
+    const angle = Math.atan2(scaledDy, scaledDx);
+
+    const clampedDx = scaledDist > 0 ? (scaledDx / scaledDist) * normDist : 0;
+    const clampedDy = scaledDist > 0 ? (scaledDy / scaledDist) * normDist : 0;
+
+    setTestAimStick({
+      active: true,
+      dx: clampedDx,
+      dy: clampedDy,
+      angle,
+      power: Math.round((normDist / maxRadius) * 100),
+    });
+  };
+
+  const handleTestAimRelease = () => {
+    setTestAimStick({ active: false, dx: 0, dy: 0, angle: 0, power: 0 });
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -560,6 +608,229 @@ export const ControlsMappingModal: React.FC<ControlsMappingModalProps> = ({
                       </p>
                     </div>
                   </button>
+                </div>
+              </div>
+
+              {/* Touch Aim Sensitivity Control Card */}
+              <div className="p-3 sm:p-5 rounded-2xl bg-slate-900/90 border-2 border-amber-500/40 shadow-lg shadow-amber-500/5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center shrink-0 shadow-md">
+                      <SlidersHorizontal className="w-5 h-5 text-amber-400" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                        SENSIBILITÀ DI MIRA TOUCH
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40 font-bold">
+                          JOYSTICK DESTRO
+                        </span>
+                      </h4>
+                      <p className="text-[10px] sm:text-xs text-slate-300">
+                        Regola l'escursione del pollice e la reattività di puntamento per l'attacco manuale.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 self-start sm:self-center px-3 py-1.5 rounded-2xl bg-gradient-to-r from-amber-500/25 to-yellow-500/25 border-2 border-amber-400 text-amber-300 font-black text-sm shadow">
+                    <Target className="w-4 h-4 text-amber-400 animate-pulse" />
+                    <span>{Math.round((config.touchAimSensitivity ?? 1.0) * 100)}%</span>
+                    <span className="text-xs text-amber-200">({(config.touchAimSensitivity ?? 1.0).toFixed(1)}x)</span>
+                  </div>
+                </div>
+
+                {/* Range Slider */}
+                <div className="space-y-1.5 px-1 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <div className="flex justify-between items-center text-[10px] sm:text-[11px] font-black text-slate-400">
+                    <span className="text-sky-300 flex items-center gap-1">
+                      🎯 Precisione (0.5x - 50%)
+                    </span>
+                    <span className="text-amber-300 font-black">
+                      ⚡ Standard (1.0x - 100%)
+                    </span>
+                    <span className="text-red-400 flex items-center gap-1">
+                      🔥 Iper-Reattivo (2.0x - 200%)
+                    </span>
+                  </div>
+
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.05"
+                    value={config.touchAimSensitivity ?? 1.0}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setConfig((c) => ({ ...c, touchAimSensitivity: val }));
+                    }}
+                    className="w-full h-3 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400 focus:outline-none"
+                  />
+
+                  <div className="flex justify-between text-[9px] text-slate-500 px-0.5">
+                    <span>50%</span>
+                    <span>75%</span>
+                    <span>100% (Default)</span>
+                    <span>125%</span>
+                    <span>150%</span>
+                    <span>175%</span>
+                    <span>200%</span>
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wide">
+                    Preimpostazioni Rapide Consigliate:
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sound.playClick();
+                        setConfig((c) => ({ ...c, touchAimSensitivity: 0.7 }));
+                      }}
+                      className={`p-2 rounded-xl border-2 text-left transition flex flex-col gap-0.5 ${
+                        Math.abs((config.touchAimSensitivity ?? 1.0) - 0.7) < 0.05
+                          ? 'bg-sky-500/25 border-sky-400 text-sky-200 shadow-md'
+                          : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-black text-xs">
+                        <span>🎯 Cecchino</span>
+                        <span className="text-[10px] text-sky-400">0.7x (70%)</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 leading-tight">
+                        Corsa ampia per micro-correzioni millimetriche (es. Blaze).
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sound.playClick();
+                        setConfig((c) => ({ ...c, touchAimSensitivity: 1.0 }));
+                      }}
+                      className={`p-2 rounded-xl border-2 text-left transition flex flex-col gap-0.5 ${
+                        Math.abs((config.touchAimSensitivity ?? 1.0) - 1.0) < 0.05
+                          ? 'bg-amber-500/25 border-amber-400 text-amber-200 shadow-md'
+                          : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-black text-xs">
+                        <span>⚡ Bilanciato</span>
+                        <span className="text-[10px] text-amber-400">1.0x (100%)</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 leading-tight">
+                        Configurazione arcade classica predefinita.
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sound.playClick();
+                        setConfig((c) => ({ ...c, touchAimSensitivity: 1.4 }));
+                      }}
+                      className={`p-2 rounded-xl border-2 text-left transition flex flex-col gap-0.5 ${
+                        Math.abs((config.touchAimSensitivity ?? 1.0) - 1.4) < 0.05
+                          ? 'bg-rose-500/25 border-rose-400 text-rose-200 shadow-md'
+                          : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-black text-xs">
+                        <span>🔥 Rapido</span>
+                        <span className="text-[10px] text-rose-400">1.4x (140%)</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 leading-tight">
+                        Rotazione reattiva con minimo movimento delle dita.
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sound.playClick();
+                        setConfig((c) => ({ ...c, touchAimSensitivity: 1.8 }));
+                      }}
+                      className={`p-2 rounded-xl border-2 text-left transition flex flex-col gap-0.5 ${
+                        Math.abs((config.touchAimSensitivity ?? 1.0) - 1.8) < 0.05
+                          ? 'bg-purple-500/25 border-purple-400 text-purple-200 shadow-md'
+                          : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-black text-xs">
+                        <span>🚀 Fulmine</span>
+                        <span className="text-[10px] text-purple-400">1.8x (180%)</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 leading-tight">
+                        Rotazione istantanea con leggeri tocchi (ravvicinato / Viper).
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live Interactive Sensitivity Test Pad */}
+                <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="text-left space-y-1">
+                    <span className="text-xs font-black text-amber-300 uppercase tracking-wide flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      Prova Subito la Sensibilità:
+                    </span>
+                    <p className="text-[10px] sm:text-xs text-slate-400 max-w-xs">
+                      Trascina il cerchio rosso qui a fianco con il dito o mouse: noterai subito come cambia l'agilità e la corsa del joystick!
+                    </p>
+                    <div className="flex items-center gap-2 pt-1 text-[10px] font-bold text-slate-300">
+                      <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700">
+                        Angolo: {testAimStick.active ? `${Math.round((testAimStick.angle * 180) / Math.PI)}°` : 'Inattivo'}
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700">
+                        Potenza: {testAimStick.active ? `${testAimStick.power}%` : '0%'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Interactive Test Joystick Ring */}
+                  <div
+                    onPointerDown={(e) => {
+                      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+                      handleTestAimPointer(e.clientX, e.clientY, e.currentTarget);
+                    }}
+                    onPointerMove={(e) => {
+                      if (testAimStick.active) {
+                        handleTestAimPointer(e.clientX, e.clientY, e.currentTarget);
+                      }
+                    }}
+                    onPointerUp={handleTestAimRelease}
+                    onPointerCancel={handleTestAimRelease}
+                    className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-slate-900/90 border-2 border-red-500/50 flex items-center justify-center shrink-0 cursor-crosshair select-none touch-none shadow-inner"
+                  >
+                    {/* Crosshair guide lines */}
+                    <div className="absolute w-full h-[1px] bg-red-500/20 pointer-events-none" />
+                    <div className="absolute h-full w-[1px] bg-red-500/20 pointer-events-none" />
+
+                    {/* Aim trajectory line during drag */}
+                    {testAimStick.active && (
+                      <div
+                        className="absolute h-1 bg-gradient-to-r from-red-500 to-amber-300 rounded-full pointer-events-none origin-left"
+                        style={{
+                          left: '50%',
+                          top: '50%',
+                          width: `${testAimStick.power * 0.45}px`,
+                          transform: `rotate(${testAimStick.angle}rad)`,
+                        }}
+                      />
+                    )}
+
+                    {/* Joystick Knob */}
+                    <div
+                      className="absolute w-11 h-11 rounded-full bg-gradient-to-tr from-red-600 to-red-400 border-2 border-white shadow-lg flex items-center justify-center text-white pointer-events-none transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75"
+                      style={{
+                        left: `${50 + (testAimStick.dx / 45) * 40}%`,
+                        top: `${50 + (testAimStick.dy / 45) * 40}%`,
+                      }}
+                    >
+                      <Crosshair className="w-5 h-5 animate-pulse" />
+                    </div>
+                  </div>
                 </div>
               </div>
 
