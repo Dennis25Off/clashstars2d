@@ -1,0 +1,6 @@
+{
+  "name": "Clash Stars",
+  "description": "Sparatutto d'azione multigiocatore e Battle Royale ispirato a Brawl Stars con eroi unici, casse premio e cross-play.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

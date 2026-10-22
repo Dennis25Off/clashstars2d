@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    position: fixed;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    background-color: #080c15;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+.font-game {
+  font-family: 'Rowdies', 'Outfit', system-ui, sans-serif;
+}
+
+.font-chango {
+  font-family: 'Chango', cursive, sans-serif;
+}
+
+/* 3D Brawl-style comic buttons */
+.brawl-btn-yellow {
+  background: linear-gradient(180deg, #fde047 0%, #eab308 60%, #ca8a04 100%);
+  box-shadow: 0 6px 0 #854d0e, 0 10px 15px rgba(0,0,0,0.4);
+  text-shadow: 0 2px 0 #713f12;
+  transition: all 0.08s ease-in-out;
+}
+.brawl-btn-yellow:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #854d0e, 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.brawl-btn-blue {
+  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 60%, #1d4ed8 100%);
+  box-shadow: 0 6px 0 #1e3a8a, 0 10px 15px rgba(0,0,0,0.4);
+  text-shadow: 0 2px 0 #0f172a;
+  transition: all 0.08s ease-in-out;
+}
+.brawl-btn-blue:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #1e3a8a, 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.brawl-btn-purple {
+  background: linear-gradient(180deg, #c084fc 0%, #9333ea 60%, #7e22ce 100%);
+  box-shadow: 0 6px 0 #581c87, 0 10px 15px rgba(0,0,0,0.4);
+  text-shadow: 0 2px 0 #3b0764;
+  transition: all 0.08s ease-in-out;
+}
+.brawl-btn-purple:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #581c87, 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.brawl-btn-red {
+  background: linear-gradient(180deg, #f87171 0%, #dc2626 60%, #b91c1c 100%);
+  box-shadow: 0 6px 0 #7f1d1d, 0 10px 15px rgba(0,0,0,0.4);
+  text-shadow: 0 2px 0 #450a0a;
+  transition: all 0.08s ease-in-out;
+}
+.brawl-btn-red:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #7f1d1d, 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.brawl-btn-green {
+  background: linear-gradient(180deg, #4ade80 0%, #16a34a 60%, #15803d 100%);
+  box-shadow: 0 6px 0 #14532d, 0 10px 15px rgba(0,0,0,0.4);
+  text-shadow: 0 2px 0 #052e16;
+  transition: all 0.08s ease-in-out;
+}
+.brawl-btn-green:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #14532d, 0 4px 6px rgba(0,0,0,0.3);
+}
+
+/* Comic black stroke for titles */
+.text-stroke-comic {
+  -webkit-text-stroke: 4px #000000;
+  paint-order: stroke fill;
+}
+
+.text-stroke-thin {
+  -webkit-text-stroke: 2px #000000;
+  paint-order: stroke fill;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.2);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb {
+  background: #3b82f6;
+  border-radius: 999px;
+}

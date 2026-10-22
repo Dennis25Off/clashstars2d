@@ -1,0 +1,43 @@
+{
+  "id": "/",
+  "name": "Clash Stars",
+  "short_name": "ClashStars",
+  "description": "Sparatutto d'azione Battle Royale in tempo reale in stile Brawl Stars con eroi unici, casse e cross-play.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone", "window-controls-overlay"],
+  "orientation": "any",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "categories": ["games", "action", "arcade"],
+  "lang": "it",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Gioca Battle Royale",
+      "short_name": "Battaglia",
+      "description": "Entra subito in una partita Showdown",
+      "url": "/?mode=battle"
+    },
+    {
+      "name": "Apri Casse",
+      "short_name": "Casse",
+      "description": "Visualizza e apri le tue Casse Stelle",
+      "url": "/?tab=boxes"
+    }
+  ]
+}

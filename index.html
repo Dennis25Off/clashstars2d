@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Clash Stars</title>
+    <meta name="description" content="Sparatutto d'azione multigiocatore e Battle Royale ispirato a Brawl Stars con eroi unici, casse premio e cross-play." />
+    <meta property="og:title" content="Clash Stars" />
+    <meta property="og:description" content="Sparatutto d'azione multigiocatore e Battle Royale ispirato a Brawl Stars con eroi unici, casse premio e cross-play." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    
+    <!-- Mobile full screen & no bars for iOS and Android -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Clash Stars" />
+    <meta name="theme-color" content="#090d16" />
+    <meta name="color-scheme" content="dark" />
+    
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    
+    <!-- Suppress ambient iframe WebSocket connection notices as HMR is disabled in AI Studio preview -->
+    <script>
+      (function() {
+        // Intercept console.error to filter out Vite WebSocket connection notices
+        const origError = console.error;
+        console.error = function(...args) {
+          try {
+            const str = args.map(function(a) {
+              return a instanceof Error ? (a.message + ' ' + (a.stack || '')) : String(a);
+            }).join(' ');
+            if (str.includes('WebSocket') || str.includes('websocket') || str.includes('without opened') || str.includes('connection lost')) {
+              return;
+            }
+          } catch (_) {}
+          return origError.apply(console, args);
+        };
+
+        // Complete robust Mock WebSocket to satisfy Vite client without attempting failing socket handshakes
+        if (typeof window !== 'undefined') {
+          class FakeWebSocket extends EventTarget {
+            static CONNECTING = 0;
+            static OPEN = 1;
+            static CLOSING = 2;
+            static CLOSED = 3;
+
+            CONNECTING = 0;
+            OPEN = 1;
+            CLOSING = 2;
+            CLOSED = 3;
+
+            constructor(url, protocols) {
+              super();
+              this.url = String(url || '');
+              this.protocols = protocols || '';
+              this.readyState = 1; // WebSocket.OPEN
+              this.bufferedAmount = 0;
+              this.extensions = '';
+              this.protocol = '';
+              this.binaryType = 'blob';
+
+              this.onopen = null;
+              this.onclose = null;
+              this.onerror = null;
+              this.onmessage = null;
+
+              setTimeout(() => {
+                if (this.readyState === 1) {
+                  const ev = new Event('open');
+                  if (typeof this.onopen === 'function') {
+                    try { this.onopen(ev); } catch (_) {}
+                  }
+                  this.dispatchEvent(ev);
+                }
+              }, 10);
+            }
+
+            send() {}
+
+            close(code, reason) {
+              this.readyState = 3; // CLOSED
+              const ev = new CloseEvent('close', {
+                wasClean: true,
+                code: code || 1000,
+                reason: reason || 'Normal Closure',
+              });
+              if (typeof this.onclose === 'function') {
+                try { this.onclose(ev); } catch (_) {}
+              }
+              this.dispatchEvent(ev);
+            }
+          }
+
+          window.WebSocket = FakeWebSocket;
+        }
+
+        window.addEventListener('error', function(e) {
+          const msg = e && (e.message || (e.error && e.error.message));
+          if (msg && (msg.includes('WebSocket') || msg.includes('websocket') || msg.includes('without opened') || msg.includes('connection lost'))) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e) {
+          const msg = e && e.reason && (String(e.reason.message || e.reason));
+          if (msg && (msg.includes('WebSocket') || msg.includes('websocket') || msg.includes('without opened') || msg.includes('connection lost'))) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            return true;
+          }
+        }, true);
+      })();
+    </script>
+    
+    <!-- Google Font for arcade/brawler typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chango&family=Outfit:wght@500;700;800;900&family=Rowdies:wght@400;700&display=swap" rel="stylesheet">
+  </head>
+  <body class="bg-[#090d16] text-white overflow-hidden select-none touch-none font-['Outfit',sans-serif]">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
