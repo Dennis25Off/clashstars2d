@@ -323,63 +323,55 @@ export const MatchmakingModal: React.FC<MatchmakingModalProps> = ({
             )}
           </h2>
           </div>
-        {/* 10 Player Slots Grid */}
-        <div className="w-full grid grid-cols-2 sm:grid-cols-5 gap-2.5 mb-5">
-          {Array.from({ length: 10 }).map((_, i) => {
-            const p = players[i];
-            const brawlerDef = p ? BRAWLERS[p.brawlerId] : null;
+        {/* Solo il giocatore principale nel matchmaking */}
+<div className="w-full flex justify-center mb-5">
+  {(() => {
+    // Trova il giocatore principale reale (non bot) all'interno della lista
+    const mainPlayer = players.find(p => p && !p.isBot);
+    
+    // Se per qualche motivo l'array è vuoto al primo millisecondo, fa un fallback sul primo elemento
+    const p = mainPlayer || players[0]; 
+    const brawlerDef = p ? BRAWLERS[p.brawlerId] : null;
 
-            return (
-              <div
-                key={i}
-                className={`relative rounded-2xl p-2.5 flex flex-col items-center justify-center border-2 transition-all ${
-                  p
-                    ? p.isBot
-                      ? 'bg-purple-950/40 border-purple-500/80 shadow-md scale-100'
-                      : 'bg-emerald-950/40 border-emerald-500 shadow-lg scale-100 ring-2 ring-emerald-500/30'
-                    : 'bg-slate-950/60 border-slate-800 border-dashed opacity-50 scale-95'
-                }`}
-              >
-                {p ? (
-                  <>
-                    {/* Brawler Avatar circle */}
-                    <div
-                      className="w-11 h-11 rounded-full flex items-center justify-center text-xl shadow-inner border-2 border-white mb-1.5"
-                      style={{ backgroundColor: brawlerDef?.color || '#3b82f6' }}
-                    >
-                      {brawlerDef?.avatarEmoji}
-                    </div>
-
-                    <div className="font-black text-xs text-white truncate max-w-[90px] text-center">
-                      {p.name}
-                    </div>
-
-                    <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-400">
-                      {renderPlatformIcon(p.platform)}
-                      <span>{p.trophies} 🏆</span>
-                    </div>
-
-                    {/* Real Player vs Bot Badge */}
-                    <span
-                      className={`mt-1 px-1.5 py-0.2 rounded font-black text-[8px] uppercase tracking-wider ${
-                        p.isBot
-                          ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40'
-                          : 'bg-emerald-500/30 text-emerald-300 border border-emerald-400/50'
-                      }`}
-                    >
-                      {p.isBot ? '🤖 BOT' : '🟢 REALE'}
-                    </span>
-                  </>
-                ) : (
-                  <div className="h-24 flex flex-col items-center justify-center text-slate-600">
-                    <span className="text-xl animate-pulse">?</span>
-                    <span className="text-[9px] font-bold mt-1 text-slate-500">In attesa...</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+    if (!p) {
+      return (
+        <div className="bg-slate-950/60 border-2 border-slate-800 border-dashed rounded-2xl p-4 w-40 flex flex-col items-center justify-center opacity-50 scale-95">
+          <span className="text-xl animate-pulse text-slate-600">?</span>
+          <span className="text-[9px] font-bold mt-1 text-slate-500">In attesa...</span>
         </div>
+      );
+    }
+
+    return (
+      <div
+        className="relative rounded-2xl p-4 flex flex-col items-center justify-center border-2 transition-all bg-emerald-950/40 border-emerald-500 shadow-lg scale-100 ring-2 ring-emerald-500/30 w-44 md:w-52"
+      >
+        {/* Brawler Avatar circle */}
+        <div
+          className="w-14 h-14 rounded-full flex items-center justify-center text-2xl shadow-inner border-2 border-white mb-2"
+          style={{ backgroundColor: brawlerDef?.color || '#3b82f6' }}
+        >
+          {brawlerDef?.avatarEmoji || '🤠'}
+        </div>
+
+        <div className="font-black text-sm text-white truncate max-w-[120px] text-center">
+          {p.name}
+        </div>
+
+        <div className="flex items-center gap-1 mt-1 text-xs text-slate-400">
+          {renderPlatformIcon(p.platform)}
+          <span>{p.trophies} 🏆</span>
+        </div>
+
+        {/* Real Player Badge */}
+        <span className="mt-2 px-2 py-0.5 rounded font-black text-[9px] uppercase tracking-wider bg-emerald-500/30 text-emerald-300 border border-emerald-400/50">
+          🟢 REALE
+        </span>
+      </div>
+    );
+  })()}
+</div>
+
 
         {/* Countdown Indicator or Action Buttons */}
         {countdown !== null ? (

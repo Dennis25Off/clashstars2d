@@ -37,7 +37,6 @@ export const MatchStartOverlay: React.FC<MatchStartOverlayProps> = ({
   const enemies = matchedPlayers ? matchedPlayers.slice(1) : [];
 
   return (
-    // Ridotto il padding da p-8 a p-4 su mobile (p-6 su schermi medi)
     <div className="absolute inset-0 z-50 flex flex-col justify-between bg-black/90 backdrop-blur-sm p-4 md:p-6 text-white select-none pointer-events-auto overflow-y-auto">
       
       {/* SEZIONE SUPERIORE: Titolo e Contatore compatti */}
@@ -56,12 +55,11 @@ export const MatchStartOverlay: React.FC<MatchStartOverlayProps> = ({
         </div>
       </div>
 
-      {/* SEZIONE CENTRALE: Griglia ultra-ottimizzata */}
-      <div className="flex items-center justify-center w-full my-auto max-w-5xl mx-auto py-2">
-        {/* Su mobile usa flex-wrap con card più piccole, su desktop torna in griglia a 2 righe fisse */}
+      {/* SEZIONE CENTRALE: Griglia sollevata verso l'alto (aggiunto mb-auto per creare spinta) */}
+      <div className="flex items-center justify-center w-full my-auto mb-auto max-w-5xl mx-auto py-4">
         <div className="flex flex-wrap justify-center items-center gap-2 md:grid md:grid-rows-2 md:grid-flow-col md:gap-3">
           
-          {/* 1. LA TUA SCHEDA (Compatta) */}
+          {/* 1. LA TUA SCHEDA */}
           <div className="flex flex-col items-center bg-gradient-to-b from-blue-600/40 to-blue-900/40 border-2 border-blue-400 rounded-lg p-2 w-24 md:w-28 shadow-lg transform active:scale-95 transition-transform">
             <span className="bg-blue-500 text-[8px] font-black px-2 py-0.5 rounded-full uppercase mb-1 tracking-wider shadow">Tu</span>
             <div className="w-10 h-12 bg-blue-950 border border-blue-400 rounded-md flex items-center justify-center text-lg shadow-inner">
@@ -93,8 +91,8 @@ export const MatchStartOverlay: React.FC<MatchStartOverlayProps> = ({
         </div>
       </div>
 
-      {/* SEZIONE INFERIORE: Suggerimento rimpicciolito o nascosto su schermi piccolissimi */}
-      <div className="text-center text-[10px] font-bold text-gray-500 tracking-wide uppercase animate-pulse hidden sm:block">
+      {/* SEZIONE INFERIORE: Suggerimento alleggerito per non spingere in basso la griglia */}
+      <div className="text-center text-[9px] font-bold text-gray-600 tracking-wide uppercase animate-pulse mt-auto pb-1 hidden sm:block">
         Consiglio: Raccogli i cubi di energia per aumentare i tuoi punti vita e i danni!
       </div>
     </div>
