@@ -901,7 +901,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       </div>
 
       {/* BOTTOM CONTROLS BAR: Left Movement (Joystick OR D-Pad with Visible Keys), Gadget, Super Button, Right Combat */}
-      <div className="flex items-end justify-between w-full pb-1 sm:pb-3 pointer-events-none">
+      <div className="flex items-end justify-between w-full pb-0 sm:pb-0.5 pointer-events-none">
+
         {/* LEFT CONTROLS: Movement with Visible WASD Keys (Multi-Touch Enabled) */}
         <div className="relative pointer-events-auto flex items-end gap-2">
           {controls.mobileMoveMode === 'joystick' ? (
@@ -909,7 +910,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <div
               ref={leftTouchRef}
               onTouchStart={handleLeftTouchStart}
-              className="relative w-32 h-32 sm:w-38 sm:h-38 rounded-full bg-slate-900/60 border-2 border-sky-400/50 backdrop-blur-xs touch-none flex items-center justify-center shrink-0 shadow-lg"
+              className="relative w-28 h-28 sm:w-38 sm:h-38 rounded-full bg-slate-900/60 border-2 border-sky-400/50 backdrop-blur-xs touch-none flex items-center justify-center shrink-0 shadow-lg"
             >
               {/* Visible WASD Key Badges on the joystick perimeter (Non-blocking visual guides) */}
               {controls.showVisibleKeys && (
@@ -978,7 +979,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </div>
           ) : (
             /* --- VISIBLE D-PAD TOUCHABLE BUTTONS MODE --- */
-            <div className="relative w-32 h-32 sm:w-38 sm:h-38 p-1 rounded-3xl bg-slate-900/70 border-2 border-sky-400/60 backdrop-blur-xs flex flex-col items-center justify-center shrink-0 shadow-lg">
+            <div className="relative w-28 h-28 sm:w-38 sm:h-38 p-1 rounded-3xl bg-slate-900/70 border-2 border-sky-400/60 backdrop-blur-xs flex flex-col items-center justify-center shrink-0 shadow-lg">
               {/* Up button */}
               <button
                 onTouchStart={(e) => {
@@ -991,7 +992,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 }}
                 onMouseDown={() => setDpadDirection('up', true)}
                 onMouseUp={() => setDpadDirection('up', false)}
-                className={`w-9.5 h-9.5 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
+                className={`w-8 h-8 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
                   dpadActive.up || activeKeys.w
                     ? 'bg-sky-400 border-white text-slate-950 scale-105 shadow-lg shadow-sky-400/60'
                     : 'bg-slate-800 border-sky-400/50 text-sky-200 hover:bg-slate-700'
@@ -1014,7 +1015,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   }}
                   onMouseDown={() => setDpadDirection('left', true)}
                   onMouseUp={() => setDpadDirection('left', false)}
-                  className={`w-9.5 h-9.5 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
+                  className={`w-8 h-8 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
                     dpadActive.left || activeKeys.a
                       ? 'bg-sky-400 border-white text-slate-950 scale-105 shadow-lg shadow-sky-400/60'
                       : 'bg-slate-800 border-sky-400/50 text-sky-200 hover:bg-slate-700'
@@ -1025,7 +1026,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 </button>
 
                 {/* Center dot / quick switch */}
-                <div className="w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-full bg-slate-950/80 border border-sky-500/40 flex items-center justify-center text-[7px] sm:text-[8px] text-sky-300 font-black">
+                <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-full bg-slate-950/80 border border-sky-500/40 flex items-center justify-center text-[7px] sm:text-[8px] text-sky-300 font-black">
                   +
                 </div>
 
@@ -1041,7 +1042,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   }}
                   onMouseDown={() => setDpadDirection('right', true)}
                   onMouseUp={() => setDpadDirection('right', false)}
-                  className={`w-9.5 h-9.5 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
+                  className={`w-8 h-8 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
                     dpadActive.right || activeKeys.d
                       ? 'bg-sky-400 border-white text-slate-950 scale-105 shadow-lg shadow-sky-400/60'
                       : 'bg-slate-800 border-sky-400/50 text-sky-200 hover:bg-slate-700'
@@ -1064,7 +1065,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 }}
                 onMouseDown={() => setDpadDirection('down', true)}
                 onMouseUp={() => setDpadDirection('down', false)}
-                className={`w-9.5 h-9.5 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
+                className={`w-8 h-8 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
                   dpadActive.down || activeKeys.s
                     ? 'bg-sky-400 border-white text-slate-950 scale-105 shadow-lg shadow-sky-400/60'
                     : 'bg-slate-800 border-sky-400/50 text-sky-200 hover:bg-slate-700'
@@ -1234,7 +1235,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 }
                 engine.firePlayerNormalAttack();
               }}
-              className="relative w-32 h-32 sm:w-38 sm:h-38 rounded-full bg-slate-900/60 border-2 border-red-900/60 backdrop-blur-xs touch-none flex items-center justify-center shrink-0 cursor-crosshair shadow-lg"
+              className="relative w-28 h-28 sm:w-38 sm:h-38 rounded-full bg-slate-900/60 border-2 border-red-900/60 backdrop-blur-xs touch-none flex items-center justify-center shrink-0 cursor-crosshair shadow-lg"
             >
               {/* Visible Attack Key Badge on top */}
               {controls.showVisibleKeys && (
