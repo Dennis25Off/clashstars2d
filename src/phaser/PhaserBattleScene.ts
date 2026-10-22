@@ -70,6 +70,17 @@ interface ActiveBurst {
 export class PhaserBattleScene extends Phaser.Scene {
  // Flag pubblica per bloccare il gameplay durante l'anteprima
   public isCountdownActive: boolean = true;
+  
+      public mapData!: MapData;
+  public player!: BrawlerEntity;
+  public brawlers: BrawlerEntity[] = [];
+  public projectiles: Projectile[] = [];
+  public particles: Particle[] = [];
+  public damageNumbers: DamageNumber[] = [];
+  public powerBoxes: PowerBox[] = [];
+  public powerCubes: PowerCubeDrop[] = [];
+  public powerUps: PowerUpItem[] = [];
+  public obstacles: MapObstacle[] = [];
 
   constructor() {
     super('PhaserBattleScene');
@@ -105,18 +116,6 @@ export class PhaserBattleScene extends Phaser.Scene {
     
     // Pulisce l'evento per evitare duplicati nei match successivi
     this.game.events.off('REACT_COUNTDOWN_COMPLETE');
-    
-      public mapData!: MapData;
-  public player!: BrawlerEntity;
-  public brawlers: BrawlerEntity[] = [];
-  public projectiles: Projectile[] = [];
-  public particles: Particle[] = [];
-  public damageNumbers: DamageNumber[] = [];
-  public powerBoxes: PowerBox[] = [];
-  public powerCubes: PowerCubeDrop[] = [];
-  public powerUps: PowerUpItem[] = [];
-  public obstacles: MapObstacle[] = [];
-
   }
 }
 
