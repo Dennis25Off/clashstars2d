@@ -941,7 +941,7 @@ export const ControlsMappingModal: React.FC<ControlsMappingModalProps> = ({
                       setLastActionTriggered('W / Su');
                     }}
                     onTouchEnd={() => setActivePressedKeys((p) => ({ ...p, w: false }))}
-                    className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-black text-sm transition ${
+                    className={`w-10.5 h-10.5 sm:w-11 sm:h-11 rounded-xl border-2 flex items-center justify-center font-black text-xs sm:text-sm transition ${
                       isKeyActive('w') || isKeyActive('arrowup')
                         ? 'bg-sky-500 border-white text-white scale-110 shadow-lg shadow-sky-500/50'
                         : 'bg-slate-800 border-slate-700 text-slate-200'
@@ -961,7 +961,7 @@ export const ControlsMappingModal: React.FC<ControlsMappingModalProps> = ({
                         setLastActionTriggered('A / Sinistra');
                       }}
                       onTouchEnd={() => setActivePressedKeys((p) => ({ ...p, a: false }))}
-                      className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-black text-sm transition ${
+                      className={`w-10.5 h-10.5 sm:w-11 sm:h-11 rounded-xl border-2 flex items-center justify-center font-black text-xs sm:text-sm transition ${
                         isKeyActive('a') || isKeyActive('arrowleft')
                           ? 'bg-sky-500 border-white text-white scale-110 shadow-lg shadow-sky-500/50'
                           : 'bg-slate-800 border-slate-700 text-slate-200'
@@ -980,7 +980,7 @@ export const ControlsMappingModal: React.FC<ControlsMappingModalProps> = ({
                         setLastActionTriggered('S / Giù');
                       }}
                       onTouchEnd={() => setActivePressedKeys((p) => ({ ...p, s: false }))}
-                      className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-black text-sm transition ${
+                      className={`w-10.5 h-10.5 sm:w-11 sm:h-11 rounded-xl border-2 flex items-center justify-center font-black text-xs sm:text-sm transition ${
                         isKeyActive('s') || isKeyActive('arrowdown')
                           ? 'bg-sky-500 border-white text-white scale-110 shadow-lg shadow-sky-500/50'
                           : 'bg-slate-800 border-slate-700 text-slate-200'
@@ -999,7 +999,7 @@ export const ControlsMappingModal: React.FC<ControlsMappingModalProps> = ({
                         setLastActionTriggered('D / Destra');
                       }}
                       onTouchEnd={() => setActivePressedKeys((p) => ({ ...p, d: false }))}
-                      className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-black text-sm transition ${
+                      className={`w-10.5 h-10.5 sm:w-11 sm:h-11 rounded-xl border-2 flex items-center justify-center font-black text-xs sm:text-sm transition ${
                         isKeyActive('d') || isKeyActive('arrowright')
                           ? 'bg-sky-500 border-white text-white scale-110 shadow-lg shadow-sky-500/50'
                           : 'bg-slate-800 border-slate-700 text-slate-200'

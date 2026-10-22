@@ -18,7 +18,7 @@ export const BRAWLERS: Record<BrawlerId, BrawlerDef> = {
     attackRange: 550,
     attackSpread: 0.1,
     attackDamage: 250, // 6 x 250 = 1500 di danno se tutti i colpi vanno a segno
-    bulletCount: 3,
+    bulletCount: 6,
     bulletSpeed: 17,
     bulletRadius: 6,
     bulletType: 'bullet',

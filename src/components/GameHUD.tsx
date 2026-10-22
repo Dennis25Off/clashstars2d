@@ -356,7 +356,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             const dx = touchX - centerX;
             const dy = touchY - centerY;
             const dist = Math.hypot(dx, dy);
-            const maxRadius = 55;
+            const maxRadius = 48;
             const normDist = Math.min(dist, maxRadius);
             const angle = Math.atan2(dy, dx);
 
@@ -374,10 +374,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             // Set visual active direction keys
             setActiveKeys((prev) => ({
               ...prev,
-              w: dy < -12,
-              s: dy > 12,
-              a: dx < -12,
-              d: dx > 12,
+              w: dy < -10,
+              s: dy > 10,
+              a: dx < -10,
+              d: dx > 10,
             }));
             break;
           }
@@ -403,7 +403,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             const scaledDx = dx * sensitivity;
             const scaledDy = dy * sensitivity;
             const scaledDist = Math.hypot(scaledDx, scaledDy);
-            const maxRadius = 55;
+            const maxRadius = 48;
             const normDist = Math.min(scaledDist, maxRadius);
             const angle = Math.atan2(scaledDy, scaledDx);
 
@@ -414,7 +414,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             rightStickRef.current.currY = clampedY;
             setRightStick((prev) => ({ ...prev, currX: clampedX, currY: clampedY }));
 
-            const deadzone = Math.max(6, Math.round(14 / Math.max(0.4, sensitivity)));
+            const deadzone = Math.max(5, Math.round(12 / Math.max(0.4, sensitivity)));
             if (rawDist > deadzone) {
               engine.aimVector.x = Math.cos(angle);
               engine.aimVector.y = Math.sin(angle);
@@ -497,7 +497,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             const dist = Math.hypot(dx, dy);
 
             const sensitivity = controlsRef.current.touchAimSensitivity ?? 1.0;
-            const deadzone = Math.max(8, Math.round(18 / Math.max(0.4, sensitivity)));
+            const deadzone = Math.max(7, Math.round(15 / Math.max(0.4, sensitivity)));
 
             if (dist < deadzone || duration < 190) {
               // Quick tap: Auto-aim!
@@ -577,7 +577,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
     const dx = touchX - centerX;
     const dy = touchY - centerY;
     const dist = Math.hypot(dx, dy);
-    const maxRadius = 55;
+    const maxRadius = 48;
     const normDist = Math.min(dist, maxRadius);
     const angle = dist > 0 ? Math.atan2(dy, dx) : 0;
     const currX = centerX + Math.cos(angle) * normDist;
@@ -586,7 +586,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
     leftStickRef.current = { active: true, centerX, centerY, currX, currY };
     setLeftStick({ active: true, startX: centerX, startY: centerY, currX, currY });
 
-    if (dist > 8) {
+    if (dist > 7) {
       engine.moveVector = {
         x: (Math.cos(angle) * normDist) / maxRadius,
         y: (Math.sin(angle) * normDist) / maxRadius,
@@ -909,14 +909,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <div
               ref={leftTouchRef}
               onTouchStart={handleLeftTouchStart}
-              className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-slate-900/60 border-2 border-sky-400/50 backdrop-blur-xs touch-none flex items-center justify-center shrink-0 shadow-lg"
+              className="relative w-32 h-32 sm:w-38 sm:h-38 rounded-full bg-slate-900/60 border-2 border-sky-400/50 backdrop-blur-xs touch-none flex items-center justify-center shrink-0 shadow-lg"
             >
               {/* Visible WASD Key Badges on the joystick perimeter (Non-blocking visual guides) */}
               {controls.showVisibleKeys && (
                 <>
                   {/* W Key (Top) */}
                   <div
-                    className={`absolute top-0.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-none ${
+                    className={`absolute top-0.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg border-2 font-black text-[9px] sm:text-[11px] shadow-md transition-all pointer-events-none ${
                       activeKeys.w || dpadActive.up
                         ? 'bg-sky-400 border-white text-slate-950 scale-125 shadow-sky-400/80 ring-2 ring-white'
                         : 'bg-slate-900/95 border-sky-400/80 text-sky-200'
@@ -927,7 +927,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
                   {/* S Key (Bottom) */}
                   <div
-                    className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-none ${
+                    className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-lg border-2 font-black text-[9px] sm:text-[11px] shadow-md transition-all pointer-events-none ${
                       activeKeys.s || dpadActive.down
                         ? 'bg-sky-400 border-white text-slate-950 scale-125 shadow-sky-400/80 ring-2 ring-white'
                         : 'bg-slate-900/95 border-sky-400/80 text-sky-200'
@@ -938,7 +938,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
                   {/* A Key (Left) */}
                   <div
-                    className={`absolute left-0.5 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-none ${
+                    className={`absolute left-0.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-lg border-2 font-black text-[9px] sm:text-[11px] shadow-md transition-all pointer-events-none ${
                       activeKeys.a || dpadActive.left
                         ? 'bg-sky-400 border-white text-slate-950 scale-125 shadow-sky-400/80 ring-2 ring-white'
                         : 'bg-slate-900/95 border-sky-400/80 text-sky-200'
@@ -949,7 +949,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
                   {/* D Key (Right) */}
                   <div
-                    className={`absolute right-0.5 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg border-2 font-black text-[10px] sm:text-xs shadow-md transition-all pointer-events-none ${
+                    className={`absolute right-0.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-lg border-2 font-black text-[9px] sm:text-[11px] shadow-md transition-all pointer-events-none ${
                       activeKeys.d || dpadActive.right
                         ? 'bg-sky-400 border-white text-slate-950 scale-125 shadow-sky-400/80 ring-2 ring-white'
                         : 'bg-slate-900/95 border-sky-400/80 text-sky-200'
@@ -961,24 +961,24 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               )}
 
               {/* Base Thumbstick ring */}
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-sky-400/60 bg-sky-500/20 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-[10px] text-sky-200 font-black tracking-wider">MUOVI</span>
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 border-sky-400/60 bg-sky-500/20 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-[9px] sm:text-[10px] text-sky-200 font-black tracking-wider leading-none">MUOVI</span>
                 {controls.showVisibleKeys && (
-                  <span className="text-[8px] text-sky-300 font-bold">WASD</span>
+                  <span className="text-[7px] sm:text-[8px] text-sky-300 font-bold leading-none mt-0.5">WASD</span>
                 )}
               </div>
 
               {/* Active Thumb Knob */}
               {leftStick.active && (
                 <div
-                  className="absolute w-14 h-14 rounded-full bg-gradient-to-tr from-sky-500 to-sky-300 border-2 border-white shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-1/2 animate-pulse"
+                  className="absolute w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-gradient-to-tr from-sky-500 to-sky-300 border-2 border-white shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-1/2 animate-pulse"
                   style={{ left: `${leftStick.currX}px`, top: `${leftStick.currY}px` }}
                 />
               )}
             </div>
           ) : (
             /* --- VISIBLE D-PAD TOUCHABLE BUTTONS MODE --- */
-            <div className="relative w-36 h-36 sm:w-44 sm:h-44 p-1 rounded-3xl bg-slate-900/70 border-2 border-sky-400/60 backdrop-blur-xs flex flex-col items-center justify-center shrink-0 shadow-lg">
+            <div className="relative w-32 h-32 sm:w-38 sm:h-38 p-1 rounded-3xl bg-slate-900/70 border-2 border-sky-400/60 backdrop-blur-xs flex flex-col items-center justify-center shrink-0 shadow-lg">
               {/* Up button */}
               <button
                 onTouchStart={(e) => {
@@ -991,17 +991,17 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 }}
                 onMouseDown={() => setDpadDirection('up', true)}
                 onMouseUp={() => setDpadDirection('up', false)}
-                className={`w-11 h-11 sm:w-13 sm:h-13 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
+                className={`w-9.5 h-9.5 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
                   dpadActive.up || activeKeys.w
                     ? 'bg-sky-400 border-white text-slate-950 scale-105 shadow-lg shadow-sky-400/60'
                     : 'bg-slate-800 border-sky-400/50 text-sky-200 hover:bg-slate-700'
                 }`}
               >
-                <span className="text-[9px]">▲</span>
-                <span className="text-[10px] font-black leading-none">W</span>
+                <span className="text-[8px] sm:text-[9px] leading-none">▲</span>
+                <span className="text-[9px] sm:text-[10px] font-black leading-none mt-0.5">W</span>
               </button>
 
-              <div className="flex items-center gap-2 my-1">
+              <div className="flex items-center gap-1.5 sm:gap-2 my-0.5 sm:my-1">
                 {/* Left button */}
                 <button
                   onTouchStart={(e) => {
@@ -1014,18 +1014,18 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   }}
                   onMouseDown={() => setDpadDirection('left', true)}
                   onMouseUp={() => setDpadDirection('left', false)}
-                  className={`w-11 h-11 sm:w-13 sm:h-13 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
+                  className={`w-9.5 h-9.5 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
                     dpadActive.left || activeKeys.a
                       ? 'bg-sky-400 border-white text-slate-950 scale-105 shadow-lg shadow-sky-400/60'
                       : 'bg-slate-800 border-sky-400/50 text-sky-200 hover:bg-slate-700'
                   }`}
                 >
-                  <span className="text-[9px]">◄</span>
-                  <span className="text-[10px] font-black leading-none">A</span>
+                  <span className="text-[8px] sm:text-[9px] leading-none">◄</span>
+                  <span className="text-[9px] sm:text-[10px] font-black leading-none mt-0.5">A</span>
                 </button>
 
                 {/* Center dot / quick switch */}
-                <div className="w-8 h-8 rounded-full bg-slate-950/80 border border-sky-500/40 flex items-center justify-center text-[8px] text-sky-300 font-black">
+                <div className="w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-full bg-slate-950/80 border border-sky-500/40 flex items-center justify-center text-[7px] sm:text-[8px] text-sky-300 font-black">
                   +
                 </div>
 
@@ -1041,14 +1041,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   }}
                   onMouseDown={() => setDpadDirection('right', true)}
                   onMouseUp={() => setDpadDirection('right', false)}
-                  className={`w-11 h-11 sm:w-13 sm:h-13 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
+                  className={`w-9.5 h-9.5 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
                     dpadActive.right || activeKeys.d
                       ? 'bg-sky-400 border-white text-slate-950 scale-105 shadow-lg shadow-sky-400/60'
                       : 'bg-slate-800 border-sky-400/50 text-sky-200 hover:bg-slate-700'
                   }`}
                 >
-                  <span className="text-[9px]">►</span>
-                  <span className="text-[10px] font-black leading-none">D</span>
+                  <span className="text-[8px] sm:text-[9px] leading-none">►</span>
+                  <span className="text-[9px] sm:text-[10px] font-black leading-none mt-0.5">D</span>
                 </button>
               </div>
 
@@ -1064,14 +1064,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 }}
                 onMouseDown={() => setDpadDirection('down', true)}
                 onMouseUp={() => setDpadDirection('down', false)}
-                className={`w-11 h-11 sm:w-13 sm:h-13 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
+                className={`w-9.5 h-9.5 sm:w-11 sm:h-11 rounded-xl border-2 flex flex-col items-center justify-center font-black text-xs transition active:scale-95 ${
                   dpadActive.down || activeKeys.s
                     ? 'bg-sky-400 border-white text-slate-950 scale-105 shadow-lg shadow-sky-400/60'
                     : 'bg-slate-800 border-sky-400/50 text-sky-200 hover:bg-slate-700'
                 }`}
               >
-                <span className="text-[10px] font-black leading-none">S</span>
-                <span className="text-[9px]">▼</span>
+                <span className="text-[9px] sm:text-[10px] font-black leading-none mb-0.5">S</span>
+                <span className="text-[8px] sm:text-[9px] leading-none">▼</span>
               </button>
             </div>
           )}
@@ -1234,7 +1234,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 }
                 engine.firePlayerNormalAttack();
               }}
-              className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-slate-900/60 border-2 border-red-900/60 backdrop-blur-xs touch-none flex items-center justify-center shrink-0 cursor-crosshair shadow-lg"
+              className="relative w-32 h-32 sm:w-38 sm:h-38 rounded-full bg-slate-900/60 border-2 border-red-900/60 backdrop-blur-xs touch-none flex items-center justify-center shrink-0 cursor-crosshair shadow-lg"
             >
               {/* Visible Attack Key Badge on top */}
               {controls.showVisibleKeys && (
@@ -1251,7 +1251,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
               {/* Base Attack Thumbstick Button */}
               <div
-                className={`w-18 h-18 sm:w-22 sm:h-22 rounded-full border-3 flex flex-col items-center justify-center transition shadow-lg ${
+                className={`w-16 h-16 sm:w-19 sm:h-19 rounded-full border-3 flex flex-col items-center justify-center transition shadow-lg ${
                   activeKeys.f || activeKeys.leftClick
                     ? 'bg-red-500 border-white text-white scale-110 shadow-red-500/60'
                     : 'bg-gradient-to-tr from-red-700 to-red-500 border-red-300 text-white shadow-red-900/40'
@@ -1269,7 +1269,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               {/* Active Thumb Knob during drag aiming */}
               {rightStick.active && (
                 <div
-                  className="absolute w-14 h-14 rounded-full bg-red-600 border-2 border-white shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-1/2 animate-pulse"
+                  className="absolute w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-red-600 border-2 border-white shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-1/2 animate-pulse"
                   style={{ left: `${rightStick.currX}px`, top: `${rightStick.currY}px` }}
                 />
               )}
