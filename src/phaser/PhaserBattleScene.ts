@@ -70,8 +70,9 @@ interface ActiveBurst {
 export class PhaserBattleScene extends Phaser.Scene {
  // Flag pubblica per bloccare il gameplay durante l'anteprima
   public isCountdownActive: boolean = true;
-  
-      public mapData!: MapData;
+
+  // 2. Proprietà pubbliche della classe (messe nella posizione corretta)
+  public mapData!: MapData;
   public player!: BrawlerEntity;
   public brawlers: BrawlerEntity[] = [];
   public projectiles: Projectile[] = [];
@@ -81,44 +82,6 @@ export class PhaserBattleScene extends Phaser.Scene {
   public powerCubes: PowerCubeDrop[] = [];
   public powerUps: PowerUpItem[] = [];
   public obstacles: MapObstacle[] = [];
-
-  constructor() {
-    super('PhaserBattleScene');
-  }
-
-  create() {
-    // Forza il blocco iniziale all'avvio della scena
-    this.isCountdownActive = true;
-
-    // Ascolta l'evento globale lanciato da React quando finisce il countdown
-    this.game.events.on('REACT_COUNTDOWN_COMPLETE', () => {
-      this.startMatch();
-    });
-
-    // ... Incolla qui il resto del tuo codice originale di create() ...
-  }
-
-  update(time: number, delta: number) {
-    // SE IL COUNTDOWN È ATTIVO, BLOCCA TUTTI GLI INPUT E IL NETWORKING DI SPOSTAMENTO
-    if (this.isCountdownActive) {
-      return;
-    }
-
-    // ... Incolla qui il resto del tuo codice originale di update() ...
-  }
-
-  public startMatch() {
-    this.isCountdownActive = false;
-    
-    // Riproduci il feedback sonoro e visivo di inizio round
-    sound.play('match_start'); 
-    this.cameras.main.flash(400, 255, 255, 255);
-    
-    // Pulisce l'evento per evitare duplicati nei match successivi
-    this.game.events.off('REACT_COUNTDOWN_COMPLETE');
-  }
-}
-
   // Poison Storm Zone
   public poisonZone = {
     centerX: 1200,
@@ -222,7 +185,14 @@ export class PhaserBattleScene extends Phaser.Scene {
     if (data) {
       this.init(data);
     }
+	
+	this.isCountdownActive = true;
 
+    // Ascolta l'evento globale lanciato da React quando finisce il countdown
+    this.game.events.on('REACT_COUNTDOWN_COMPLETE', () => {
+      this.startMatch();
+    });
+	
     // 1. Generate map
     this.mapData = generateBattleRoyaleMap();
     this.obstacles = this.mapData.obstacles;
@@ -272,6 +242,7 @@ export class PhaserBattleScene extends Phaser.Scene {
     }
 
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (this.isCountdownActive) return; // Blocca se il countdown è attivo
       if (pointer.wasTouch || (pointer.event as any)?.pointerType === 'touch') return;
       this.isMouseActive = true;
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
@@ -295,6 +266,7 @@ export class PhaserBattleScene extends Phaser.Scene {
     });
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (this.isCountdownActive) return; // Blocca se il countdown è attivo
       if (pointer.wasTouch || (pointer.event as any)?.pointerType === 'touch') return;
       this.isMouseActive = true;
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
@@ -574,6 +546,14 @@ export class PhaserBattleScene extends Phaser.Scene {
 
     const dt = Math.min(delta / 1000, 0.05);
 
+    // 🟢 MODIFICA DEL COUNTDOWN: Se attivo, aggiorna la telecamera e disegna i layer grafici fissi,
+    // ma interrompe immediatamente l'update bloccando movimenti locali, comandi di rete e IA dei bot.
+    if (this.isCountdownActive) {
+      this.updateCamera();
+      this.renderPhaserLayers();
+      return; 
+    }
+
     // 1. Process Player Movement & Input
     this.updatePlayerInput(dt);
 
@@ -607,7 +587,7 @@ export class PhaserBattleScene extends Phaser.Scene {
     // 11. Check Victory / Game Over
     this.checkMatchStatus();
   }
-
+  
   private updatePlayerInput(dt: number) {
     if (!this.player.isAlive || this.player.isLeaping) return;
 
