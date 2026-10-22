@@ -112,7 +112,8 @@ export default function App() {
 
       {/* 3. Battle Arena View */}
       {currentView === 'battle' && (
-        <div className="relative w-full h-full">
+        // Usiamo un contenitore fisso "isolate". L'overlay React NON deve stare dentro lo stesso blocco logico di BattleArena se causa il re-render
+        <div className="relative w-full h-full min-h-screen z-10">
           <BattleArena
             profile={profile}
             selectedBrawlerId={profile.selectedBrawler}
@@ -120,10 +121,10 @@ export default function App() {
             onUpdateProfile={updateProfile}
             onExitToMenu={handleExitToMenu}
             onPlayAgain={handlePlayAgain}
-            isCountdownActive={isCountingDown}
+            isCountdownActive={isCountingDown} 
           />
           
-          {/* L'overlay viene montato sopra la BattleArena grazie a z-50 di Tailwind */}
+          {/* L'overlay è posizionato qui, ma la gestione della sua chiusura non smonterà Phaser */}
           {isCountingDown && (
             <MatchStartOverlay
               playerBrawlerId={profile.selectedBrawler}
