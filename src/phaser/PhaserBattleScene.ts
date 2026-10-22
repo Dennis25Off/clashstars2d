@@ -545,14 +545,15 @@ export class PhaserBattleScene extends Phaser.Scene {
     if (this.isGameOver && this.placementCalculated) return;
 
     const dt = Math.min(delta / 1000, 0.05);
-    
-    // 🟢 IL TIMER SCORRE SEMPRE: Gestione del countdown senza bloccare il motore di Phaser
+
+    // Gestione del countdown interno
     if (this.isCountdownActive) {
       this.countdownTimer -= dt;
       if (this.countdownTimer <= 0) {
-        this.startMatch(); 
+        this.startMatch(); // 🔴 Ora che la funzione esiste, verrà eseguita!
       }
     }
+
     
     // 1. Process Player Movement & Input
     this.updatePlayerInput(dt);
@@ -2637,5 +2638,26 @@ export class PhaserBattleScene extends Phaser.Scene {
         this.uiGraphics.fillRect(px, pipY, pipW * partial, pipH);
       }
     }
+  }
+
+  // 🟢 INCOLLA IL METODO MANCANTE ESATTAMENTE QUI:
+  public startMatch() {
+    this.isCountdownActive = false;
+    
+    if (this.physics && this.physics.world) {
+      this.physics.resume();
+    }
+
+    this.moveVector.x = 0;
+    this.moveVector.y = 0;
+    if (this.player) {
+      this.player.vx = 0;
+      this.player.vy = 0;
+      this.player.isMoving = false;
+    }
+
+    sound.play('match_start'); 
+    this.cameras.main.flash(400, 255, 255, 255);
+    console.log("🚀 CONTROLLI ATTIVATI! Ripartenza pulita.");
   }
 }
