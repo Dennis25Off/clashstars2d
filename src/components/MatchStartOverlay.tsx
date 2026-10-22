@@ -34,21 +34,21 @@ export const MatchStartOverlay: React.FC<MatchStartOverlayProps> = ({
     };
   }, [countdown, onComplete]);
 
-  // Esclude il primo elemento (che si assume essere il giocatore locale) per avere la lista dei nemici
   const enemies = matchedPlayers ? matchedPlayers.slice(1) : [];
 
   return (
-    <div className="absolute inset-0 z-50 flex flex-col justify-between bg-black/85 backdrop-blur-sm p-8 text-white select-none pointer-events-auto">
+    // Ridotto il padding da p-8 a p-4 su mobile (p-6 su schermi medi)
+    <div className="absolute inset-0 z-50 flex flex-col justify-between bg-black/90 backdrop-blur-sm p-4 md:p-6 text-white select-none pointer-events-auto overflow-y-auto">
       
-      {/* SEZIONE SUPERIORE: Titolo e Contatore Countdown */}
-      <div className="text-center mt-2 flex flex-col items-center justify-center gap-2">
-        <h1 className="text-3xl font-black tracking-widest text-yellow-400 uppercase drop-shadow-[0_3px_0_#b45309]">
+      {/* SEZIONE SUPERIORE: Titolo e Contatore compatti */}
+      <div className="text-center mt-1 flex flex-col items-center justify-center gap-1">
+        <h1 className="text-xl md:text-3xl font-black tracking-widest text-yellow-400 uppercase drop-shadow-[0_2px_0_#b45309]">
           Scontro Iniziato!
         </h1>
-        <div className="flex items-center gap-2 bg-black/40 border border-gray-700/50 rounded-full px-5 py-1.5 shadow-inner">
-          <span className="text-[10px] uppercase font-black tracking-widest text-gray-400">Inizio tra</span>
+        <div className="flex items-center gap-2 bg-black/50 border border-gray-700/40 rounded-full px-4 py-1 shadow-inner">
+          <span className="text-[9px] uppercase font-black tracking-widest text-gray-400">Inizio</span>
           <div 
-            className="text-4xl font-black font-mono text-yellow-400 drop-shadow-[0_2px_0_#b45309] transition-transform duration-150 ease-out min-w-[28px]"
+            className="text-2xl md:text-4xl font-black font-mono text-yellow-400 drop-shadow-[0_2px_0_#b45309] transition-transform duration-150 ease-out min-w-[20px]"
             style={{ transform: `scale(${scale})` }}
           >
             {countdown}
@@ -56,35 +56,36 @@ export const MatchStartOverlay: React.FC<MatchStartOverlayProps> = ({
         </div>
       </div>
 
-      {/* SEZIONE CENTRALE: Griglia unica con "TU" in prima posizione */}
-      <div className="flex items-center justify-center w-full my-auto max-w-6xl mx-auto">
-        <div className="grid grid-rows-2 grid-flow-col gap-4">
+      {/* SEZIONE CENTRALE: Griglia ultra-ottimizzata */}
+      <div className="flex items-center justify-center w-full my-auto max-w-5xl mx-auto py-2">
+        {/* Su mobile usa flex-wrap con card più piccole, su desktop torna in griglia a 2 righe fisse */}
+        <div className="flex flex-wrap justify-center items-center gap-2 md:grid md:grid-rows-2 md:grid-flow-col md:gap-3">
           
-          {/* 1. LA TUA SCHEDA (Sempre per prima nella griglia) */}
-          <div className="flex flex-col items-center bg-gradient-to-b from-blue-600/40 to-blue-900/40 border-2 border-blue-400 rounded-xl p-3 w-32 shadow-xl shadow-blue-500/10 transform hover:scale-105 transition-transform duration-200">
-            <span className="bg-blue-500 text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase mb-2 tracking-wider shadow">Tu</span>
-            <div className="w-12 h-12 bg-blue-950 border-2 border-blue-400 rounded-full flex items-center justify-center text-xl shadow-inner">
+          {/* 1. LA TUA SCHEDA (Compatta) */}
+          <div className="flex flex-col items-center bg-gradient-to-b from-blue-600/40 to-blue-900/40 border-2 border-blue-400 rounded-lg p-2 w-24 md:w-28 shadow-lg transform active:scale-95 transition-transform">
+            <span className="bg-blue-500 text-[8px] font-black px-2 py-0.5 rounded-full uppercase mb-1 tracking-wider shadow">Tu</span>
+            <div className="w-10 h-12 bg-blue-950 border border-blue-400 rounded-md flex items-center justify-center text-lg shadow-inner">
               🤠
             </div>
-            <h3 className="text-xs font-black mt-2 uppercase truncate max-w-full text-blue-200 text-center">{playerBrawlerId}</h3>
-            <span className="text-[11px] text-yellow-400 font-mono font-bold mt-0.5">🏆 MAX</span>
+            <h3 className="text-[10px] md:text-xs font-black mt-1.5 uppercase truncate max-w-full text-blue-200 text-center">{playerBrawlerId}</h3>
+            <span className="text-[9px] md:text-[10px] text-yellow-400 font-mono font-bold mt-0.5">🏆 MAX</span>
           </div>
 
-          {/* 2. GLI ALTRI GIOCATORI / NEMICI (Riempiono i posti successivi nella griglia a 2 righe) */}
+          {/* 2. GLI ALTRI GIOCATORI */}
           {enemies.length === 0 ? (
-            <div className="text-gray-500 italic font-bold flex items-center col-span-3 pl-4">In attesa degli avversari...</div>
+            <div className="text-gray-500 text-xs italic font-bold">In attesa degli avversari...</div>
           ) : (
             enemies.map((enemy, index) => (
               <div 
                 key={index} 
-                className="flex flex-col items-center bg-gradient-to-b from-red-600/25 to-red-900/25 border-2 border-red-500/60 rounded-xl p-3 w-32 shadow-lg"
+                className="flex flex-col items-center bg-gradient-to-b from-red-600/20 to-red-900/20 border border-red-500/50 rounded-lg p-2 w-24 md:w-28 shadow-md"
               >
-                <span className="bg-red-500/80 text-[9px] font-black px-2 py-0.5 rounded-full uppercase mb-2 tracking-wider">Nemico</span>
-                <div className="w-12 h-12 bg-red-950 border-2 border-red-400/50 rounded-full flex items-center justify-center text-xl shadow-inner">
+                <span className="bg-red-500/80 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase mb-1 tracking-wider">Nemico</span>
+                <div className="w-10 h-10 bg-red-950 border border-red-500/40 rounded-full flex items-center justify-center text-lg shadow-inner">
                   👤
                 </div>
-                <h3 className="text-xs font-black mt-2 uppercase truncate max-w-full text-red-200 text-center">{enemy.name || 'Player'}</h3>
-                <span className="text-[11px] text-yellow-500/80 font-mono font-bold mt-0.5">🏆 {enemy.trophies || 0}</span>
+                <h3 className="text-[10px] md:text-xs font-black mt-1.5 uppercase truncate max-w-full text-red-200 text-center">{enemy.name || 'Player'}</h3>
+                <span className="text-[9px] md:text-[10px] text-yellow-500/70 font-mono font-bold mt-0.5">🏆 {enemy.trophies || 0}</span>
               </div>
             ))
           )}
@@ -92,8 +93,8 @@ export const MatchStartOverlay: React.FC<MatchStartOverlayProps> = ({
         </div>
       </div>
 
-      {/* SEZIONE INFERIORE: Suggerimento */}
-      <div className="text-center mb-2 text-xs font-bold text-gray-500 tracking-wide uppercase animate-pulse">
+      {/* SEZIONE INFERIORE: Suggerimento rimpicciolito o nascosto su schermi piccolissimi */}
+      <div className="text-center text-[10px] font-bold text-gray-500 tracking-wide uppercase animate-pulse hidden sm:block">
         Consiglio: Raccogli i cubi di energia per aumentare i tuoi punti vita e i danni!
       </div>
     </div>
