@@ -546,6 +546,13 @@ export class PhaserBattleScene extends Phaser.Scene {
 
     const dt = Math.min(delta / 1000, 0.05);
     
+    // 🟢 IL TIMER SCORRE SEMPRE: Gestione del countdown senza bloccare il motore di Phaser
+    if (this.isCountdownActive) {
+      this.countdownTimer -= dt;
+      if (this.countdownTimer <= 0) {
+        this.startMatch(); 
+      }
+    }
     
     // 1. Process Player Movement & Input
     this.updatePlayerInput(dt);
@@ -582,7 +589,7 @@ export class PhaserBattleScene extends Phaser.Scene {
   }
   
   private updatePlayerInput(dt: number) {
-        // 🟢 SE IL COUNTDOWN È ATTIVO, FORZIAMO IL GIOCATORE A RIMANERE FERMO E USCIAMO
+    // 🟢 SE IL COUNTDOWN È ATTIVO, IL GIOCATORE LOCALE RIMANE IMMOBILE
     if (this.isCountdownActive) {
       if (this.player) {
         this.player.isMoving = false;
@@ -594,7 +601,7 @@ export class PhaserBattleScene extends Phaser.Scene {
       this.moveVector.y = 0;
       this.aimVector.isAiming = false;
       this.aimVector.isSuperAiming = false;
-      return; 
+      return; // Esce prima di leggere tastiera e mouse
     }
 
     if (!this.player.isAlive || this.player.isLeaping) return;
@@ -844,13 +851,13 @@ export class PhaserBattleScene extends Phaser.Scene {
   }
 
   private updateBotAI(bot: BrawlerEntity, dt: number) {
-    // 🟢 SE IL COUNTDOWN È ATTIVO, I BOT RIMANGONO IN IDLE SENZA MUOVERSI O ATTACCARE
+    // 🟢 SE IL COUNTDOWN È ATTIVO, I BOT RIMANGONO IN IDLE SENZA FARE LOGICA
     if (this.isCountdownActive) {
       bot.isMoving = false;
       bot.walkCycle = 0;
       bot.vx = 0;
       bot.vy = 0;
-      return;
+      return; // Esce prima di prendere decisioni o sparare
     }
 
     if (bot.isLeaping || !bot.isAlive) return;
